@@ -142,3 +142,98 @@ public class RuntimeConstantPoolOOM {
 `程序计数器`、`虚拟机栈`和`本地方法栈`这3个区域随线程而生，随线程而灭，栈中的帧随着方法的进入和退出而有条不紊地执行着出栈和入栈操作。每一个栈帧中分配多少内存基本上是在类结构确定下来时就已知的（尽管在运行期会由即时编译器进行一些优化，但在基于概念模型的讨论里，大体上可以认为是编译期可知的），因此这几个区域的内存分配和回收都具备确定性，在这几个区域内就不需要过多考虑如何回收的问题，当方法结束或者线程结束时，内存自然就跟随着回收了。
 
 而`Java堆`和`方法区`这两个区域则有着很显著的不确定性：一个接口的多个实现类需要的内存可能会不一样，一个方法所执行的不同条件分支所需要的内存也可能不一样，只有处于运行期间，我们才能知道程序究竟会创建哪些对象，创建多少个对象，这部分内存的分配和回收时动态的。垃圾收集器所关注的正是这部分内存该如何管理。
+## 3.2 对象已死？
+## 3.2.1 引用计算算法
+```java
+public class ReferenceCountingGC {
+    public Object instance = null;
+
+    private static final int _1MB = 1024 * 1024;
+
+    private byte[] bigSize = new byte[2 * _1MB];
+
+    public static void testGC() {
+        ReferenceCountingGC objA = new ReferenceCountingGC();
+        ReferenceCountingGC objB = new ReferenceCountingGC();
+        objA.instance = objB;
+        objB.instance = objA;
+        objA = null;
+        objB = null;
+        System.gc();  //此时objA和objB能被回收，说明java并不是使用引用计数算法进行垃圾回收的
+    }
+}
+```
+### 3.2.2 可达性分析算法
+
+通过一系列称为“`GC Roots`”对象的根对象作为起始节点集，从这些节点开始，根据引用关系向下搜索，搜索过程所走过的路径称为”`引用链`”（Reference Chain），如果某个对象到GC Roots间没有任何引用链相连，或者用图论的话来说就是从GC Roots到这个对象不可达时，则证明此对象是不可能再被使用的。
+
+在Java技术体系里面，固定可作为GC Roots的对象包括以下几种：
+（1）在虚拟机栈（栈帧中的本地变量表）中引用的对象，譬如各个线程被调用的方法堆栈中使用到的参数、局部变量、临时变量等。
+（2）在方法区中类静态属性引用的对象，譬如Java类的引用类型静态变量。
+（3）在方法区中常量引用的对象，字符串常量池（String Table）里的引用。
+（4）在本地方法栈中JNI（即通常所说的Native方法）引用的对象。
+（5）Java虚拟机内部的引用，如基本数据类型对应的Class对象，一些常驻的异常对象（比如NullPointException、OutOfMemoryError等），还有系统类加载器。
+（6）所有被同步锁（synchronized关键字）持有的对象。
+（7）反映Java虚拟机内部情况的JMXBean、JVMTI中注册的回调、本地代码缓存等。
+
+除了这些固定的GC Roots集合以外，根据用户所选用的垃圾收集器以及当前回收的内存区域不同，还可以由其他对象“临时性”地加入，共同构成完整GC Roots集合。譬如分代收集和局部回收（Partial GC），如果只针对Java堆中某一块区域发起垃圾收集时（如最典型的只针对新生代的垃圾收集），必须考虑到内存区域是虚拟机自己的实现细节（在用户视角里任何内存区域都是不可见的），更不是孤立封闭的，所以`某个区域里的对象完全有可能被位于堆中其他区域的对象所引用`，这时候就需要将这些关联区域的对象也一并加入GC Roots集合中去，才能保证可达性分析的正确性。
+### 3.2.3 再谈引用
+
+`强引用`是最传统的”引用”的定义，是指在程序代码之中普遍存在的引用赋值，即类似“Object obj = new Object()”这种引用关系。无论任何情况下，只要强引用关系还存在，垃圾收集器就永远不会回收掉被引用的对象。
+
+`软引用`是用来描述一些还有用，但非必须的对象。只被软引用关联着的对象，在系统将要发生内存溢出异常前，会把这些对象列进回收范围之中进行第二次回收，如果这次回收还没有足够的内存，才会抛出内存溢出异常。在JDK1.2版之后提供了`SoftReference`类来描述软引用。
+
+`弱引用`也是用来描述那些非必须对象，但是它的强度比软引用更弱一些，被弱引用关联的对象只能生存到下一次垃圾收集发生为止。当垃圾收集器开始工作，无论当前内存是否足够，都会回收掉只被弱引用关联的对象。在JDK1.2版之后提供了`WeakReference`类来实现弱引用。
+
+`虚引用`也称为”幽灵引用”或者“幻影引用”，它是最弱的一种引用关系。一个对象是否有虚引用的存在，完全不会对其生存时间构成影响，也无法通过虚引用来取得一个对象实例。为一个对象设置虚引用关联的唯一目的只是为了能在这个对象被收集器回收时收到一个系统通知。在JDK1.2版之后提供了`PhantomReference`类来实现虚引用。
+### 3.2.4 生存还是死亡？
+
+即使在可达性分析算法中判定为不可达的对象，也不是”非死不可”的，这时候它们暂时还处于“缓刑”阶段，要真正宣告一个对象死亡，至少要经历两次标记过程：如果对象在进行可达性分析后发现没有与GC Roots相连接的引用链，那它将会被第一次标记，随后进行一次筛选，筛选的条件是此对象是否有必要执行finalize()方法。假如`对象没有覆盖finalize()方法`，或者`finalize()方法已经被虚拟机调用过`，那么虚拟机将这两种情况都视为”没有必要执行”。
+
+如果这个对象被判定为确有必要执行finalize()方法，那么该对象将会被放置在一个名为F-Queue的队列之中，并在稍后由一条由虚拟机自动建立的、低调度优先级的Finalizer线程去执行它们的finalize()方法。这里所说的“执行”是指虚拟机会触发这个方法开始运行，但并不承诺一定会等待它运行结束。这样做的原因是，如果某个对象的finalize()方法执行缓慢，或者更极端地发生了死循环，将很可能导致F-Queue队列中的其他对象永久处于等待，甚至导致整个内存回收子系统的崩溃。finalize()方法是对象逃脱死亡命运的最后一次机会，稍后收集器将对F-Queue中的对象进行第二次小规模的标记，如果对象要在finalize()中成功拯救自己——只要重新与引用链上的任何一个对象建立关联即可，譬如把自己（this关键字）赋值给某个类变量或者对象的成员变量，那在第二次标记时它将被移出”即将回收”的集合；如果对象这时候还没有逃脱，那基本上它就真的要被回收了。
+
+```java
+/**
+ * 此代码演示了两点：
+ * 1.对象可以在被GC时自我拯救
+ * 2.这种自救的机会只有一次，因为一个对象的finalize()方法最多只会被系统自动调用一次
+ */
+public class FinalizeEscapeGC {
+    public static FinalizeEscapeGC SAVE_HOOK = null;
+
+    public void isAlive() {
+        System.out.println("yes, i am still alive :)");
+    }
+
+    @Override
+    protected void finalize() throws Throwable {
+        super.finalize();
+        System.out.println("finalize method executed!");
+        FinalizeEscapeGC.SAVE_HOOK = this;
+    }
+
+    public static void main(String[] args) throws Throwable {
+        SAVE_HOOK = new FinalizeEscapeGC();
+        //对象第一次成功拯救自己
+        SAVE_HOOK = null;
+        System.gc();
+        //因为Finalizer方法优先级很低，暂停0.5秒，以等待它
+        Thread.sleep(500);
+        if (SAVE_HOOK != null) {
+            SAVE_HOOK.isAlive();
+        } else {
+            System.out.println("no, i am dead :(");
+        }
+        //下面这段代码与上面的完全相同，但是这次自救却失败了
+        SAVE_HOOK = null;
+        System.gc();
+        //因为Finalizer方法优先级很低，暂停0.5秒，以等待它
+        Thread.sleep(500);
+        if (SAVE_HOOK != null) {
+            SAVE_HOOK.isAlive();
+        } else {
+            System.out.println("no, i am dead :(");
+        }
+    }
+}
+```
