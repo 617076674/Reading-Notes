@@ -659,7 +659,7 @@ Epsilon是一款以不能够进行垃圾收集为“卖点”的垃圾收集器�
 | G1PrintRegionLivenessInfo | Xlog:gc+liveness=trace |
 | G1SummarizeConcMark | Xlog:gc+marking=trace |
 | G1SummarizeRSetStats | Xlog:gc+remset*=trace |
-| GCLogFileSize, NumberOfGCLogFiles, UseGCLogFileRotation | Xlog:gc*:file=<file>::filecount=<count>, filesize=<file size in kb> |
+| GCLogFileSize, NumberOfGCLogFiles, UseGCLogFileRotation | Xlog:gc*:file=\<file\>::filecount=\<count\>, filesize=\<file size in kb\> |
 | PrintAdaptiveSizePolicy | Xlog:gc+ergo*=trace |
 | PrintClassHistogramAfterFullGC | Xlog:classhisto*=trace |
 | PrintClassHistogramBeforeFullGC | Xlog:classhisto*=trace |
