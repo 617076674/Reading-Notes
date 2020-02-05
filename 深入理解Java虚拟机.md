@@ -1,3 +1,51 @@
+# 第1章 走近Java
+
+>世界上没有完美的程序，但我们并不因此沮丧，因为写程序本来就是一个不断追求完美的过程。
+## 1.1 概述
+
+Java能获得广泛的认可，除了它拥有一门结构严谨、面向对象的编程语言之外，还有许多不可忽视的优点：它摆脱了硬件平台的束缚，实现了“一次编译，到处运行”的理想；它提供了一种相对安全的内存管理和访问机制，避免了绝大部分内存泄漏和指针越界问题；它实现了热点代码检测和运行时编译及优化，这使得Java应用能随着运行时间的增长而获得更高的性能；它有一套完善的应用程序接口，还有无数来自商业机构和开源社区的第三方类库来帮助用户实现各种各样的功能……
+## 1.2 Java技术体系
+
+JCP（Java Community Process，Java社区）官方定义的Java技术体系包括了以下几个组成部分：
+
+（1）Java程序设计语言
+
+（2）各种硬件平台上的Java虚拟机实现
+
+（3）Class文件格式
+
+（4）Java类库API
+
+（5）来自商业机构和开源社区的第三方Java类库
+
+JDK（Java Development Kit） = Java程序设计语言 + Java类库 + Java虚拟机
+
+JRE（Java Runtime Environment） = Java类库API中的Java SE API子集 + Java虚拟机
+
+按照技术所服务的领域来划分，或者按照技术关注的重点业务来划分：
+
+（1）Java Card：支持Java小程序（Applets）运行在小内存设备（如智能卡）上的平台。
+
+（2）Java ME（Micro Edition）：支持Java程序运行在移动终端（手机、PDA）上的平台，对Java API有所精简，并加入了移动终端的针对性支持，这条产品线在JDK6以前被称为J2ME。但现在在智能手机上非常流行的、主要使用的Java语言开发程序的Android并不属于Java ME。
+
+（3）Java SE（Standard Edition）：支持面向桌面级应用（如Windows下的应用程序）的Java平台，提供了完整的Java核心API，这条产品线在JDK6以前被称为J2SE。
+
+（4）Java EE（Enterprise Edition）：支持使用多层架构的企业应用（如ERP、MIS、CRM应用）的Java平台，除了提供Java SE API外，还对其做了大量有针对性的扩充，并提供了相关的部署支持，这条产品线在JDK6以前被称为J2EE，在JDK10以后被Oracle放弃，捐献给Eclipse基金会管理，此后被称为Jakarta EE。
+## 1.3 Java发展史
+
+1991年4月，由James Gosling博士领导的绿色计划（Green Project）开始启动，此计划最初的目标是开发一种能够在各种消费性电子产品（如机顶盒、冰箱、收音机等）上运行的程序。这个计划的产品就是Java语言的前身：Oak（得名于James Gosling办公室外的一棵橡树）。Oak当时在消费品市场上并不算成功，但随着1995年互联网潮流的兴起，Oak迅速找到了最适合自己发展的市场定位并蜕变成为Java语言。
+
+1995年，Oak语言改名为Java，并且在SunWorld大会上正式发布Java 1.0版本。Java语言第一次提出了“Write Once, Run Anywhere”的口号。
+
+1996年1月23日，JDK1.0发布，Java语言有了第一个正式版本的运行环境。JDK1.0提供了一个纯解释执行的Java虚拟机实现（Sun Classic VM）。JDK1.0版本的代表技术包括：Java虚拟机、Applet、AWT等。
+
+1996年4月，十个最主要的操作系统和计算机供应商声明将在其产品中嵌入Java技术。同年9月，已有大约8.3万个网页应用了Java技术来制作。在1996年5月底，Sun于美国旧金山举行了首届JavaOne大会，从此JavaOne成为全世界数百万Java语言开发者每年一度的技术盛会。
+
+1997年2月19日，Sun公司发布了JDK1.1，Java里许多最基础的技术支撑点（如JDBC等）都是在JDK1.1版本中提出的，JDK1.1版的技术代表有：JAR文件格式、JDBC、JavaBeans、RMI等。Java语言的语法也有了一定的增强，如内部类和反射都是在这时候出现的。
+
+直到1999年4月8日，JDK1.1一共发布了1.1.0至1.1.8这9个版本。从1.1.4以后，每个JDK版本都有一个属于自己的名字（工程代号），分别为：JDK1.1.4-Sparkler（宝石）、JDK1.1.5-Pumpkin（南瓜）、JDK1.1.6-Abigail（阿比盖尔，女子名）、JDK1.1.7-Brutus（布鲁图，古罗马政治家和将军）和JDK1.1.8-Chelsea（切尔西，城市名）。
+
+1998年12月4日，JDK迎来了一个里程碑式的重要版本：工程代号为Playground（竞技场）的JDK1.2，Sun在这个版本中把Java技术体系拆分为三个方向，分别是面向桌面应用开发的J2SE（Java 2 Platform，Standard Edition）、面向企业级开发的J2EE（Java 2 Platform，Enterprise Edition）和面向手机等移动终端开发的J2ME（Java 2 Platform，Micro Edition）。在这个版本中出现的代表性技术非常多，如EJB、Java Plug-in、Java IDL、Swing等，并且这个版本中Java虚拟机第一次内置了JIT（Just In Time）即时编译器（JDK1.2中曾并存过三个虚拟机，Classic VM、HotSpot VM和Exact VM，其中Exact VM只在Solaris平台出现过；后面两款虚拟机都是内置了JIT即时编译器的，而之前版本所带的Classic VM只能以外挂的形式使用即时编译器）。在语言和API层面上，Java添加了strictfp关键字，Java类库添加了现在Java编码之中极为常用的一系列Collections集合类等。在1999年3月和7月，分别有JDK1.2.1和JDK1.2.2两个小升级版本发布。
 # 第2章 Java内存区域与内存溢出异常
 
 >Java与C++之间有一堵由内存动态分配技术和垃圾收集技术所围成的高墙，墙外面的人想进去，墙里面的人却想出来。
@@ -688,3 +736,53 @@ Epsilon是一款以不能够进行垃圾收集为“卖点”的垃圾收集器�
 | G1TraceEagerReclaimHumongousObjects | Xlog:gc+humongous=debug |
 | G1TraceStringSymbolTableScrubbing | Xlog:gc+stringtable=trace |
 ### 3.7.4 垃圾收集器参数总结
+
+| 参数 | 描述 |
+| :-: | :-: |
+| UseSerialGC | 虚拟机运行在Client模式下的默认值，打开此开关后，使用Serial + Serial Old的收集器组合进行内存回收 |
+| UseParNewGC | 打开此开关后，使用ParNew + Serial Old的收集器组合进行内存回收，在JDK9后不再支持 |
+| UseConcMarkSweepGC | 打开此开关后，使用ParNew + CMS + Serial Old的收集器组合进行内存回收。Serial Old作为CMS收集器出现“Concurrent Mode Failure”失败后的后备收集器使用 |
+| UseParallelGC | JDK9之前虚拟机运行在Server模式下的默认值，打开此开关后，使用Parallel Scavenge + Serial Old（PS MarkSweep）的收集器组合进行内存回收 |
+| UseParallelOldGC | 打开此开关后，使用Parallel Scavenge + Parallel Old的收集器组合进行内存回收 |
+| SurvivorRatio | 新生代中Eden区域与Survivor区域的容量比值，默认为8，代表牌Eden：Survivor = 8：1 |
+| PretenureSizeThreshold | 直接晋升到老年代的对象大小，设置这个参数后，大于这个参数的对象将直接在老年代分配 |
+| MaxTenuringThreshold | 晋升到老年代的对象年龄。每个对象在坚持过一次Minor GC之后，年龄就增加1，当超过这个参数值时就进入老年代 |
+| UseAdaptiveSizePolicy | 动态调整Java堆中各个区域的大小以及进入老年代的年龄 |
+| HandlePromotionFailure | 是否允许分配担保失败，即老年代的剩余空间不足以应付新生代的整个Eden和Survivor区的所有对象都存活的极端情况 |
+| ParallelGCThreads | 设置并行GC时进行内存回收的线程数 |
+| GCTimeRatio | GC时间占总时间的比率，默认值为99，即允许1%的GC时间。仅在使用Parallel Scavenge收集器时生效 |
+| MaxGCPauseMillis | 设置GC的最大停顿时间。仅在使用Parallel Scavenge收集器时生效 |
+| CMSInitiatingOccupancyFraction | 设置CMS收集器在老年代空间被使用多少后触发垃圾收集。默认值为68%，仅在使用CMS收集器时生效 |
+| UseCMSCompactAtFullCollection | 设置CMS收集器在完成垃圾收集后是否要进行一次内存碎片整理。仅在使用CMS收集器时生效，此参数从JDK9开始废弃 |
+| CMSFullGCsBeforeCompaction | 设置CMS进行若干次垃圾收集后再启动一次内存碎片整理。仅在使用CMS收集器时生效，此参数从JDK9开始废弃 |
+| UseG1GC | 使用G1收集器，这个是JDK9后的Server模式默认值 |
+| G1HeapRegionSize | 设置Region大小，并非最终值 |
+| MaxGCPauseMillis | 设置G1收集过程目标时间，默认值是200ms，不是硬性条件 |
+| G1NewSizePercent | 新生代最小值，默认值是5% |
+| G1MaxNewSizePercent | 新生代最大值，默认值是60% |
+| ParallelGCThreads | 用户线程冻结期间并行执行的收集器线程数 |
+| ConcGCThreads | 并发标记、并发整理的执行线程数，对不同的收集器，根据其能够并发的阶段，有不同的含义 |
+| InitiatingHeapOccupancyPercent | 设置触发标记周期的Java堆占用率阈值。默认值时45%。这里的Java堆占比指的是non_young_capacity_bytes，包括old+humongous |
+| UseShenandoahGC | 使用Shenandoah收集器。这个选项在OracleJDK中不被支持，只能在OpenJDK12或者某些支持Shenandoah的Backport发行版本使用。目前仍然要配合-XX:+UnlockExperimentalVMOptions使用 |
+| ShenandoahGCHeuristics | Shenandoah何时启动一次GC过程，其可选值有adpative、static、compact、passive、aggressive |
+| UseZGC | 使用ZGC收集器，目前仍然要配合-XX:UnlockExperimentalVMOptions使用 |
+| UseNUMA | 启用NUMA内存分配支持，目前只有Parallel Scavenge和ZGC支持，以后G1收集器可能也会支持该选项 |
+## 3.8 实战：内存分配与回收策略
+### 3.8.1 对象优先在Eden分配
+
+大多数情况下，对象在新生代Eden区中分配。当Eden区没有足够空间进行分配时，虚拟机将发起一次Minor GC。
+### 3.8.2 大对象直接进入老年代
+
+HotSpot虚拟机提供了-XX:PretenureSizeThreshold参数，指定大于该设置值的对象直接在老年代分配，这样做的目的就是避免Eden区及两个Survivor区之间来回复制，产生大量的内存复制操作。
+
+>-XX:PretenureSizeThreshold参数只对Serial和ParNew两款新生代收集器有效，HotSpot的其他新生代收集器，如Parallel Scavenge并不支持这个参数。如果必须使用此参数进行调优，可考虑ParNew加CMS的收集器组合。
+### 3.8.3 长期存活的对象将进入老年代
+
+虚拟机给每个对象定义了一个对象年龄计数器，存储在对象头中。对象通常在Eden区里诞生，如果经过第一次Minor GC后仍然存活，并且能被Survivor容纳的话，该对象会被移动到Survivor空间中，并且将其对象年龄设为1岁。对象在Survivor区中每熬过一次Minor GC，年龄就增加1岁，当它的年龄增加到一定程序（默认为15），就会被晋升到老年代中。对象晋升老年代的年龄阈值，可以通过参数-XX:MaxTenuringThreshold设置。
+### 3.8.4 动态对象年龄判定
+
+为了能更好地适应不同程序的内存状况，HotSpot虚拟机并不是永远要求对象的年龄必须达到-XX:MaxTenuringThreshold才能晋升老年代，如果在Survivor空间中相同年龄所有对象大小的总和大于Survivor空间的一半，年龄大于或等于该年龄的对象就可以直接进入老年代，无须等到-XX:MaxTenuringThreshold中要求的年龄。
+### 3.8.5 空间分配担保
+
+在发生Minor GC之前，虚拟机必须先检查老年代最大可用的连续空间是否大于新生代所有对象总空间，如果这个条件成立，那这一次Minor GC可以确保是安全的。如果不成立，则虚拟机会先查看-XX:HandlePromotionFailure参数的设置值是否允许担保失败（Handle Promotion Failure）；如果允许，那会继续检查老年代最大可用的连续空间是否大于历次晋升到老年代对象的平均大小，如果大于，就尝试进行一次Minor GC，尽管这次Minor GC是有风险的；如果小于，或者-XX:HandlePromotionFailure设置不允许冒险，那这时就要改为进行一次Full GC。
+## 3.9 本章小结
