@@ -37,3 +37,406 @@ EnumSet没有公有的构造器，只有静态工厂方法。在OpenJDK实现中
 `静态工厂方法的主要缺点在于，类如果不含公有的或者受保护的构造器，就不能被子类化。`例如，要想将Collections Framework中的任何便利的实现类子类化，这是不可能的。但是这样也许会因祸得福，因为它鼓励程序员使用复合，而不是继承，这正是不可变类型所需要的。
 
 `静态工厂方法的第二个缺点在于，程序员很难发现它们。`在API文档中，它们没有像构造器那样在API文档中明确标识出来，因此，对于提供了静态工厂方法而不是构造器的类来说，要想查明如何实例化一个类是非常困难的。Javadoc工具总有一天会注意到静态工厂方法。同时，通过在类或者接口注释中关注静态工厂，并遵守标准的命名习惯，也可以弥补这一劣势。
+# 第2条：遇到多个构造器参数时要考虑使用Builder模式
+
+静态工厂和构造器有个共同的局限性：它们都不能很好地扩展到大量的可选参数。
+
+重叠构造器模式：
+
+```java
+public class NutritionFacts {
+    private final int servingSize;
+
+    private final int servings;
+
+    private final int calories;
+
+    private final int fat;
+
+    private final int sodium;
+
+    private final int carbohydrate;
+
+    public NutritionFacts(int servingSize, int servings) {
+        this(servingSize, servings, 0);
+    }
+
+    public NutritionFacts(int servingSize, int servings, int calories) {
+        this(servingSize, servings, calories, 0);
+    }
+
+    public NutritionFacts(int servingSize, int servings, int calories, int fat) {
+        this(servingSize, servings, calories, fat, 0);
+    }
+
+    public NutritionFacts(int servingSize, int servings, int calories, int fat, int sodium) {
+        this(servingSize, servings, calories, fat, sodium, 0)
+    }
+
+    public NutritionFacts(int servingSize, int servings, int calories, int fat, int sodium, int carbohydrate) {
+        this.servingSize = servingSize;
+        this.servings = servings;
+        this.calories = calories;
+        this.fat = fat;
+        this.sodium = sodium;
+        this.carbohydrate = carbohydrate;
+    }
+}
+```
+
+JavaBeans模式：
+
+```java
+public class NutritionFacts {
+    private int servingSize = -1;
+
+    private int servings = -1;
+
+    private int calories = 0;
+
+    private int fat = 0;
+
+    private int sodium = 0;
+
+    private int carbohydrate = 0;
+
+    public NutritionFacts() {}
+
+    public void setServingSize(int val) {
+        servingSize = val;
+    }
+
+    public void setServings(int val) {
+        servings = val;
+    }
+
+    public void setCalories(int val) {
+        calories = val;
+    }
+
+    public void setFat(int val) {
+        fat = val;
+    }
+
+    public void setSodium(int val) {
+        sodium = val;
+    }
+
+    public void setCarbohydrate(int val) {
+        carbohydrate = val;
+    }
+}
+```
+
+在JavaBeans模式中，构造过程被分到了几个调用中，`在构造过程中JavaBean可能处于不一致的状态`。类无法仅仅通过检验构造器参数的有效性来保证一致性。试图使用处于不一致状态的对象将会导致失败，这种失败与包含错误的代码大相径庭，因此调试起来十分困难。与此相关的另一点不足在于，`JavaBeans模式使得把类做成不可变的可能性不复存在`。
+
+当对象的构造完成，并且不允许在冻结之前使用时，通过手工“冻结”对象可以弥补这些不足，但是这种方式十分笨拙，在实践中很少使用。此外，它甚至会在运行时导致错误，因为编译器无法确保程序员会在使用之前先调用对象上的freeze方法进行冻结。
+
+Builder模式：
+
+```java
+public class NutritionFacts {
+    private final int servingSize;
+
+    private final int servings;
+
+    private final int calories;
+
+    private final int fat;
+
+    private final int sodium;
+
+    private final int carbohydrate;
+
+    public static class Builder {
+        private int servingSize = -1;
+
+        private int servings = -1;
+
+        private int calories = 0;
+
+        private int fat = 0;
+
+        private int sodium = 0;
+
+        private int carbohydrate = 0;
+
+        public Builder(int servingSize, int servings) {
+            this.servingSize = servingSize;
+            this.servings = servings;
+        }
+
+        public Builder calories(int val) {
+            calories = val;
+            return this;
+        }
+
+        public Builder fat(int val) {
+            fat = val;
+            return this;
+        }
+
+        public Builder sodium(int val) {
+            sodium = val;
+            return this;
+        }
+
+        public Builder carbohydrate(int val) {
+            carbohydrate = val;
+            return this;
+        }
+
+        public NutritionFacts build() {
+            return new NutritionFacts(this);
+        }
+    }
+
+    private NutritionFacts(Builder builder) {
+        servingSize = builder.servingSize;
+        servings = builder.servings;
+        calories = builder.calories;
+        fat = builder.fat;
+        sodium = builder.sodium;
+        carbohydrate = builder.carbohydrate;
+    }
+}
+```
+
+NutritionFacts是不可变的，所有的默认参数值都单独放在一个地方。builder的设值方法返回builder本身，以便把调用链接起来，得到一个`流式`的API：
+
+```java
+NutritionFacts cocaCola = new NutritionFacts.Builder(240, 8).calories(100).sodium(35).carbohydrate(27).build();
+```
+
+这样的客户端代码很容易编写，更为重要的是易于阅读。Builder模式模拟了具名的可选参数。
+
+`Builder模式也适用于类层次结构。`
+
+```java
+public abstract class Pizza {
+    public enum Topping {HAM, MUSHROOM, ONION, PEPPER, SAUSAGE}
+
+    final Set<Topping> toppings;
+
+    abstract static class Builder<T extends Builder<T>> {
+        EnumSet<Topping> toppings = EnumSet.noneOf(Topping.class);
+
+        public T addTopping(Topping topping) {
+            toppings.add(Objects.requireNonNull(topping));
+            return self();
+        }
+
+        abstract Pizza build();
+
+        protected abstract T self();
+    }
+
+    Pizza(Builder<?> builder) {
+        toppings = builder.toppings.clone();
+    }
+}
+```
+
+Pizza.Builder的类型是泛型，带有一个递归类型参数。它和抽象的self方法一样，允许在子类中适当地进行方法链接，不需要转换类型。
+
+```java
+public class NyPizza extends Pizza {
+    public enum Size {SMALL, MEDIUM, LARGE}
+
+    private final Size size;
+
+    public static class Builder extends Pizza.Builder<Builder> {
+        private final Size size;
+
+        public Builder(Size size) {
+            this.size = Objects.requireNonNull(size);
+        }
+
+        public NyPizza build() {
+            return new NyPizza(this);
+        }
+
+        protected Builder self() {
+            return this;
+        }
+    }
+
+    private NyPizza(Builder builder) {
+        super(builder);
+        size = builder.size;
+    }
+}
+
+public class Calzone extends Pizza {
+    private final boolean sauceInside;
+
+    public static class Builder extends Pizza.Builder<Builder> {
+        private boolean sauceInside = false;
+
+        public Builder sauceInside() {
+            sauceInside = true;
+            return this;
+        }
+
+        public Calzone build() {
+            return new Calzone(this);
+        }
+
+        protected Builder self() {
+            return this;
+        }
+    }
+
+    private Calzone(Builder builder) {
+        super(builder);
+        sauceInside = builder.sauceInside;
+    }
+}
+```
+
+每个子类的构建器中的build方法，都声明返回正确的子类：NyPizza.Builder的build方法返回NyPizza，而Calzone.Builder中的则返回Calzone。在该方法中，子类方法声明返回超类中声明的返回类型的子类型，这被称作`协变返回类型`。它允许客户端无须转换类型就能使用这些构建器。
+
+```java
+NyPizza pizza = new NyPizza.Builder(SMALL).addTopping(SAUSAGE).addTopping(ONION).build();
+Calzone calzone = new Calzone.Builder().addTopping(HAM).sauceInside().build();
+```
+
+与构造器相比，builder的微略优势在于，它可以有多个可变参数。因为builder是利用单独的方法来设置每一个参数。此外，构造器还可以将多次调用某一个方法而传入的参数集中到一个域中，如前面的调用了两次addTopping方法的代码所示。
+
+Builder模式的确也有它自身的不足。为了创建对象，必须先创建它的构建器。虽然创建这个构建器的开销在实践中可能不那么明显，但是在某些十分注重性能的情况下，可能就成问题了。Builder模式还比重叠构造器模式更加冗长，因此它只在有很多参数的时候才使用，比如4个或者更多个参数。但是记住，将来你可能需要添加参数。如果一开始就使用构造器或者静态工厂，等到类需要多个参数时才添加构建器，就会无法控制，那些过时的构造器或者静态工厂显得十分不协调。因此，通常最好一开始就使用构建器。
+
+`如果类的构造器或者静态工厂中具有多个参数，设计这种类时，Builder模式就是一种不错的选择`，特别是当大多数参数都是可选或者类型相同的时候。与使用重叠构造器模式相比，使用Builder模式的客户端代码将更易于阅读和编写，构建器也比JavaBeans更加安全。
+
+# 第3条：用私有构造器或者枚举类型强化Singleton属性
+
+实现Singleton有两种常见的方法。这两种方法都要保持构造器为私有的，并导出公有的静态成员，以便允许客户端能够访问该类的唯一实例。在第一种方法中，公有静态成员是个final域：
+
+```java
+public class Elvis {
+    public static final Elvis INSTANCE = new Elvis();
+
+    private Elvis() {}
+
+    public void leaveTheBuilding() {}
+}
+```
+
+私有构造器仅被调用一次，用来实例化公有的静态final域Elvis.INSTANCE。由于缺少公有的或者受保护的构造器，所以保证了Elvis的全局唯一性：一旦Elvis类被实例化，将只会存在一个Elvis实例，不多也不少。客户端的任何行为都不会改变这一点，但要提醒一点：享有特权的客户端可以借助AccessibleObject.setAccessible方法，通过反射机制调用私有构造器。如果需要抵御这种攻击，可以修改构造器，让它在被要求创建第二个实例的时候抛出异常。
+
+在实现Singleton的第二种方法中，公有的成员是个静态工厂方法：
+
+```java
+public class Elvis {
+    private static final Elvis INSTANCE = new Elvis();
+
+    private Elvis() {}
+
+    public static Elvis getInstance() {
+        return INSTANCE;
+    }
+
+    public void leaveTheBuilding() {}
+}
+```
+
+对于静态方法Elvis.getInstance的所有调用，都会返回同一个对象引用，所以，永远不会创建其他的Elvis实例（上述提醒依然适用）。
+
+公有域方法的主要优势在于，API很清楚地表明了这个类是一个Singleton：公有的静态域是final的，所以该域总是包含相同的对象引用。第二个优势在于它更简单。
+
+静态工厂方法的优势之一在于，它提供了灵活性：在不改变其API的前提下，我们可以改变该类是否应该为Singleton的想法。工厂方法返回该类的唯一实例，但是，它很容易被修改，比如改成为每个调用该方法的线程返回一个唯一的实例。第二个优势是，如果应用程序需要，可以编写一个泛型Singleton工厂。使用静态工厂的最后一个优势是，可以通过方法引用作为提供者，比如Elvis::instance就是一个Supplier\<Elvis\>。
+
+为了将利用上述方法实现的Singleton类变成是可序列化的，仅仅在声明中加上implements Serializable是不够的。为了维护并保证Singleton，必须声明所有实例域都是transient，并提供一个readResolve方法。否则，每次反序列化一个序列化的实例时，都会创建一个新的实例。
+
+实现Singleton的第三种方法是声明一个包含单个元素的枚举类型：
+
+```java
+public enum Elvis {
+    INSTANCE;
+
+    public void leaveTheBuilding() {}
+}
+```
+
+这种方法在功能上与公有域方法相似，但更简洁，无偿地提供了序列化机制，绝对防止多次实例化，即使是在面对复杂的序列化或者反射攻击的时候。虽然这种方法还没有广泛使用，但是单元素的枚举类型经常成为实现Singleton的最佳方法。注意，如果Singleton必须扩展一个超类，而不是扩展Enum的时候，则不宜使用这个方法（虽然可以声明枚举去实现接口）。
+
+# 第4条：通过私有构造器强化不可实例化的能力
+
+有时可能需要编写只包含静态方法和静态域的类。这些类的名声很不好，因为有些人在面向对象的语言中滥用这样的类来编写过程化的程序，但它们也确实有特别的用处。我们可以利用这种类，以java.lang.Math或者java.util.Arrays的方式，把基本类型的值或者数组类型上的相关方法组织起来。我们也可以通过java.util.Collections的方式，把实现特定接口的对象上的静态方法，包括工厂方法组织起来。（从Java 8开始，也可以把这些方法放进接口中，假定这是你自己编写的接口可以进行修改。）最后，还可以利用这种类把final类上的方法组织起来，因为不能把它们放在子类中。
+
+这样的工具类不希望被实例化，因为实例化对它没有任何意义。然而，在缺少显式构造器的情况下，编译器会自动提供一个公有的、无参的缺省构造器。对于用户而言，这个构造器与其他的构造器没有任何区别。在已发行的API中常常可以看到一些被无意识地实例化的类。
+
+`企图通过将类做成抽象类来强制该类不可被实例化是行不通的。`该类可以被子类化，并且该子类也可以被实例化。这样做甚至会误导用户，以外这种类是专门为了继承而设计的。然而，有一些简单的习惯用法就可以确保类不可被实例化。由于只有当类不包含显式的构造器时，编译器才会生成缺省的构造器，因此只要让这个类包含一个私有构造器，它就不能被实例化：
+
+```java
+public class UtilityClass {
+    private UtilityClass() {
+        throw new AssertionError();
+    }
+}
+```
+
+由于显式的构造器是私有的，所以不可以再该类的外部访问它。AssertionError不是必需的，但是它可以避免不小心在类的内部调用构造器。它保证该类在任何情况下都不会被实例化。这种习惯用法也有副作用，它使得一个类不能被子类化。所有的构造器都必须显式或隐式地调用超类的构造器，在这种情形下，子类就没有可访问的超类构造器可调用了。
+
+# 第5条：优先考虑依赖注入来引用资源
+
+有许多类会依赖一个或多个底层的资源。例如，拼写检查器需要依赖词典。因此，像下面这样把类实现为静态工具类的做法并不少见：
+
+```java
+public class SpellChecker {
+    private static final Lexicon dictionary = ...;
+
+    private SpellChecker() {}
+
+    public static boolean isValid(String word) { ... }
+
+    public static List<String> suggestions(String typo) { ... }
+}
+```
+
+同样地，将这些类实现为Singleton的做法也并不少见：
+
+```java
+public class SpellChecker {
+    private final Lexicon dictionary = ...;
+
+    private SpellChecker(...) {}
+
+    public static INSTANCE = new SpellChecker(...);
+
+    public boolean isValid(String word) { ... }
+
+    public List<String> suggestions(String typo) { ... }
+}
+```
+
+以上两种方法都不理想，因为它们都是假定只有一本词典可用，实际上，每一种语言都有自己的词典，特殊词汇还要使用特殊的词典。此外，可能还需要用特殊的词典进行测试。因此假定用一本词典就能满足所有需求，这简直是痴心妄想。
+
+建议尝试用SpellChecker来支持多词典，即在现有的拼写检查器中，设dictionary域为nonfinal，并添加一个方法用它来修改词典，但是这样的设置会显得很笨拙、容易出错，并且无法并行工作。`静态工具类和Singleton类不适合于需要应用底层资源的类。`
+
+这里需要的是能够支持类的多个实例（在本例中是指SpellChecker），每一个实例都使用客户端指定的资源（在本例中是指词典）。满足该需求的最简单的模式是，`当创建一个新的实例时，就将该资源传到构造器中`。这是`依赖注入`的一种形式：词典是拼写检查器的一个依赖，在创建拼写检查器时就将词典注入其中。
+
+```java
+public class SpellChecker {
+    private final Lexicon dictionary;
+
+    public SpellChecker(Lexicon dictionary) {
+        this.dictionary = Objects.requireNonNull(dictionary);
+    }
+
+    public boolean isValid(String word) { ... }
+
+    public List<String> suggestions(String typo) { ... }
+}
+```
+
+虽然这个拼写检查器的范例中只有一个资源（词典），但是依赖注入却适用于任意数量的资源，以及任意的依赖形式。依赖注入的对象资源具有不可变性，因此多个客户端可以共享依赖对象（假设客户端们想要的是同一个底层资源）。依赖注入也同样适用于构造器、静态工厂和构建器。
+
+这个程序模式的另一种有用的变体是，将资源工厂传给构造器。工厂是可用被重复调用来创建类型实例的一个对象。这类工厂具体表现为工厂方法模式。在Java 8中增加的接口Supplier\<T\>，最适合用于表示工厂。带有Supplier\<T\>的方法，通常应该限制输入工厂的类型参数使用有限制的通配符类型，以便客户端能够传入一个工厂，来创建指定类型的任意子类型。例如，下面是一个生产马赛克的方法，它利用客户端提供的工厂来生产每一片马赛克：
+
+```java
+Mosaic create(Supplier<? entendx Tile> tileFactory) { ... }
+```
+
+虽然依赖注入极大地提升了灵活性和可测试性，但它会导致大型项目凌乱不堪，因为它通常包含上千个依赖。不过这种凌乱用一个依赖注入框架便可以终结，如Spring。
+
+总而言之，不要用Singleton和静态工具类来实现依赖一个或多个底层资源的类，且该资源的行为会影响到该类的行为；也不要直接用这个类来创建这些资源。而应该将这些资源或者工厂传给构造器（或者静态工厂，或者构建器），通过它们来创建类。这个世间就被称作依赖注入，它极大地提升了类的灵活性、可重用性和可测试性。
