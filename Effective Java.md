@@ -1965,6 +1965,7 @@ public abstract class AbstractMapEntry<K, V> implements Map.Entry<K, V> {
     }
 
     @Override
+
     public String toString() {
         return getKey() + "=" + getValue();
     }
@@ -1976,3 +1977,43 @@ public abstract class AbstractMapEntry<K, V> implements Map.Entry<K, V> {
 骨架实现上有个小小的不同，就是简单实现，AbstractMap.SimpleEntry就是就是个例子。简单实现就像骨架实现一样，这是因为它实现了接口，并且是为了继承而设计的，但是区别在于它不是抽象的：它是最简单的可能的有效实现。你可以原封不动地使用，也可以看情况将它子类化。
 
 总而言之，接口通常是定义允许多个实现的类型的最佳途径。如果你导出了一个重要的接口，就应该坚决考虑同时提供骨架实现类。而且，还应该尽可能地通过default方法在接口中提供骨架实现，以便接口的所有实现类都能使用。也就是说，对于接口的限制，通常也限制了骨架实现会采用的抽象类的形式。
+
+# 第21条：为后代设计接口
+
+在Java 8发行之前，如果不破坏现有的实现，是不可能给接口添加方法的。如果给某个接口添加了一个新的方法，一般来说，现有的实现中是没有这个方法的，因此就会导致编译错误。在Java 8中，增加了default方法构造，目的就是允许给现有的接口添加方法。但是给现有接口添加新方法还是充满风险的。
+
+default方法的声明中包括一个default实现，这是给实现了该接口但没有实现默认方法的所有类使用的。虽然Java增加了default方法之后，可以给现有接口添加方法了，但是并不能确保这些方法在之前存在的实现中都能良好运行。因为这些默认的方法是被“注入”到现有实现中的，它们的实现者并不知道，也没有许可。在Java 8之前，编写这些实现时，是默认它们的接口永远不需要任何新方法的。
+
+Java 8在核心集合接口中增加了许多新的default方法，主要是为了便于使用lambda。Java类库的default方法是高品质的通用实现，它们在大多数情况下都能正常使用。但是，并非每一个可能的实现的所有变体，始终都可以编写出一个default方法。
+
+比如，以removeIf方法为例，它在Java 8中被添加到了Collection接口。这个方法用来移除所有元素，并用一个boolean函数（或者断言）返回true。default实现指定用其迭代器来遍历集合，在每个元素上调用断言，并利用迭代器的remove方法移除断言返回值为true的元素。其声明大致如下：
+
+```java
+default boolean removeIf(Predicate<? super E> filter) {
+    Objects.requireNonNull(filter);
+    boolean result = false;
+    for (Iterator<E> it = iterator(); it.hasNext(); ) {
+        if (filter.test(it.next())) {
+            it.remove();
+            result = true;
+        }
+    }
+    return result;
+}
+```
+
+这是适用于removeIf方法的最佳通用实现，但遗憾的是，它在某些现实的Collection实现中会出错。比如，以org.apache.commons.collections4.CollectionUtils.SynchronizedCollection为例，这个类来自Apache Commons类库，类似于java.util中的静态工厂Collections.synchronizedCollection。Apache版本额外提供了利用客户端提供的对象（而不是用集合）进行锁定的功能。换句话说，它是一个包装类，它的所有方法在委托给包装集合之前，都在锁定对象上进行了同步。
+
+Apache版本的SynchronizedCollection类依然有人维护，但是到编写本书之时，它也没有取代removeIf方法。如果这个类与Java 8结合使用，将会继承removeIf的default实现，它不会（实际上也无法）保持这个类的基本承诺：围绕着每一个方法调用执行自动同步。default实现压根不知道同步这回事，也无权访问包含该锁定对象的域。如果客户在SynchronizedCollection实例上调用removeIf方法，同时另一个线程对该集合进行修改，就会导致ConcurrentModificationException或者其他异常行为。
+
+为了避免在类似的Java平台类库实现中发生这种异常，如Collections.synchronizedCollection返回的包私有类，JDK维护人员必须覆盖默认的removeIf实现，以及像它一样的其他方法，以便在调用default实现之前执行必要的同步。不属于Java平台组成部分的预先存在的集合实现，过去无法做出与接口变化相类似的改变，现在有些已经可以做到了。
+
+`有了default方法，接口的现有实现就不会出现编译时没有报错或警告，运行时却失败的情况。`这个问题虽然并非普遍，但也不是孤立的意外事件。Java 8在集合接口中添加许多方法是极易受影响的，有些现有实现已知将会受到影响。
+
+建议尽量避免利用default方法在现有接口上添加新的方法，除非有特殊需要，但就算在那样的情况下也应该慎重考虑：default的方法实现是否会破坏现有的接口实现。然而，在创建接口的时候，用default方法提供标准的方法实现时非常方便的，它简化了实现接口的任务。
+
+还要注意的是，default方法不支持从接口中删除方法，也不支持修改现有方法的签名。对接口进行这些修改肯定会破坏现有的客户端代码。
+
+结论很明显：尽管default方法现在已经是Java平台的组成部分，`但谨慎设计接口仍然是至关重要的。`虽然default方法可以在现有接口上添加方法，但这么做还是存在着很大的风险。就算接口中只有细微的缺陷都可能永远给用户带来不愉快；假如接口有严重的缺陷，则可能摧毁包含它的API。
+
+因此，在发布程序之前，测试每一个新的接口就显得尤其重要。程序员应该以不同的方法实现每一个接口。最起码不应少于三种实现。编写多个客户端程序，利用每个新接口的实例来执行不同的任务，这一点也同样重要。这些步骤对确保每个接口都能满足其既定的所有用途起到了很大的帮助。它还有助于在接口发布之前及时发现其中的缺陷，使你依然能够轻松地把它们纠正过来。`或许接口程序发布之后也能纠正，但是千万别指望它啦！`
