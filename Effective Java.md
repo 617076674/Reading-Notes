@@ -2057,3 +2057,102 @@ public class PhysicalConstants {
 工具类通常要求客户端用类名来修饰这些常量名，例如PhysicalConstants.AVOGADROS_NUMBER。如果大量利用工具类导出的常量，可以通过利用静态导入机制，避免用类名来修饰常量。
 
 简而言之，接口应该只被用来定义类型，它们不应该被用来导出常量。
+
+# 第23条：类层次优于标签类
+
+有时可能会遇到带有两种甚至更多风格的实例的类，并包含表示实例风格的标签域。例如，以下面这个类为例，它能够表示圆形或者矩形：
+
+```java
+class Figure {
+    enum Shape {RECTANGLE, CIRCLE};
+
+    final Shape shape;
+
+    double length;
+
+    double width;
+
+    double radius;
+
+    Figure(double radius) {
+        shape = Shape.CIRCLE;
+        this.radius = radius;
+    }
+
+    Figure(double length, double width) {
+        shape = Shape.RECTANGLE;
+        this.length = length;
+        this.width = width;
+    }
+
+    double area() {
+        switch(shape) {
+            case RECTANGLE:
+                return length * width;
+            case CIRCLE:
+                return Math.PI * (radius * radius);
+            default:
+                throw new AssertionError(shape);
+        }
+    }
+}
+```
+
+这种标签类有许多缺点。它们中充斥着样板代码，包括枚举声明、标签域以及条件语句。由于多个实现乱七八糟地挤在单个类中，破坏了可读性。由于实例承担着属于其他风格的不相关的域，因此内存占用也增加了。域不能做成final的，除非构造器初始化了不相关的域，产生了更多的样板代码。构造器必须不借助编译器来设置标签域，并初始化正确的数据域：如果初始化了错误的域，程序就会在运行时失败。无法给标签类添加风格，除非可以修改它的源文件。如果一定要添加风格，就必须记得给每个条件语句都添加一个条件，否则类就会在运行时失败。最后，实例的数据类型没有提供任何关于其风格的线索。一句话，`标签类过于冗长、容易出错，并且效率低下。`
+
+幸运的是，面向对象的语言提供了其他更好的方法来定义能表示多种风格对象的单个数据类型：子类型化。`标签类正是对类层次的一种简单的仿效。`
+
+为了将标签类转变成类层次，首先要为标签类的每个方法都定义一个包含抽象方法的抽象类，标签类的行为依赖于标签值。在Figure类中，只有一个这样的方法：area。这个抽象类是类层次的根。如果还有其他的方法其行为不依赖于标签的值，就把这样的方法放在这个类中。同样地，如果所有的方法都用到了某些数据域，就应该把它们放在这个类中。在Figure类中，不存在这种类型独立的方法或者数据域。
+
+接下来，为每种原始标签类都定义根类的具体子类。在前面的例子中，这样的类型有两个：圆形（circle）和矩形（rectangle）。在每个子类中都包含特定于该类型的数据域。在我们的示例中，radius是特定于圆形的，length和width是特定于矩形的。同时在每个子类中还包括针对根类中每个抽象方法的相应实现。以下是与原始的Figure类相对应的类层次：
+
+```java
+abstract class Figure {
+    abstract double area();
+}
+
+class Circle extends Figure {
+    final double radius;
+
+    Circle(double radius) {
+        this.radius = radius;
+    }
+
+    @Override
+    double area() {
+        return Math.PI * (radius * radius);
+    }
+}
+
+class Rectangle extends Figure {
+    final double length;
+
+    final double width;
+
+    Rectangle(double length, double width) {
+        this.length = length;
+        this.width = width;
+    }
+
+    @Override
+    double area() {
+        return length * width;
+    }
+}
+```
+
+这个类层次纠正了前面提到过的标签类的所有缺点。这段代码简单且清楚，不包含在原来的版本中见到的所有样板代码。每个类型的实现都配有自己的类，这些类都没有受到不相关数据域的拖累。所有的域都是final的。编译器确保每个类的构造器都初始化它的数据域，对于根类中声明的每个抽象方法都确保有一个实现。这样就杜绝了由于遗漏switch case而导致运行时失败的可能性。多名程序员可以独立地扩展层次结构，并且不用访问根类的源代码就能相互操作。每种类型都有一种相关的独立的数据类型，允许程序员指明变量的类型，限制变量，并将参数输入到特殊的类型。
+
+类层次的另一个好处在于，它们可以用来反映类型之间本质上的层次关系，有助于增强灵活性，并有助于更好地进行编译时类型检查。假设上述例子中的标签类也允许表达正方形。类层次可以反映出正方形是一种特殊的矩形这一事实（假设两者都是不可变的）：
+
+```java
+class Square extends Rectangle {
+    Square(double side) {
+        super(side, side);
+    }
+}
+```
+
+注意，上述层次中的域被直接访问，而不是通过访问方法访问。这是为了简洁起见，如果层次结构是公有的，则不允许这样做。
+
+简而言之，标签类很少有适用的时候。当你想要编写一个包含显式标签域的类时，应该考虑一下，这个标签是否可以取消，这个类是否可以用类层次来代替。当你遇到一个包含标签域的现有类时，就要考虑将它重构到一个层次结构中去。
