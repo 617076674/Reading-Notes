@@ -2199,3 +2199,185 @@ public class MySet<E> extends AbstractSet<E> {
 局部类是四种嵌套类中使用最少的类。在任何“可以声明局部变量”的地方，都可以声明局部类，并且局部类也遵守同样的作用域规则。局部类与其他三种嵌套类中的每一种都有一些共同的属性。与成员类一样，局部类有名字，可以被重复使用。与匿名类一样，只有当局部类是在非静态环境中定义的时候，才有外围实例，它们也不能包含静态成员。与匿名内部类一样，它们必须非常简短，以便不会影响可读性。
 
 总而言之，公有四种不同的嵌套类，每一种都有自己的用途。如果一个嵌套类需要在单个方法之外仍然是可见的，或者它太长了，不适合放在方法内部，就应该使用成员类。如果成员类的每个实例都需要一个指向其外围实例的引用，就要把成员类做成非静态的；否则，就做成静态的。假设这个嵌套类属于一个方法的内部，如果你只需要在一个地方创建实例，并且已经有了一个预置的类型可以说明这个类的特征，就要把它做成你们类；否则，就做成局部类。
+
+# 第25条：限制源文件为单个顶级类
+
+虽然Java编译器允许在一个源文件中定义多个顶级类，但这么做并没有什么好处，只会带来巨大的风险。因为在一个源文件中定义多个顶级类，可能导致给一个类提供多个定义，哪一个定义会被用到，取决于源文件被传给编译器的顺序。
+
+为了更具体地说明，下面举个例子，这个源文件中中包含一个Main类，它将引用另外两个顶级类（Utensil和Dessert）的成员：
+
+```java
+public class Main {
+    public static void main(String[] args) {
+        System.out.println(Utensil.NAME + Dessert.NAME);
+    }
+}
+```
+
+现在假设你在一个名为Utensil.java的源文件中同时定义了Utensil和Dessert：
+
+```java
+class Utensil {
+    static final String NAME = "pan";
+}
+
+class Desert {
+    static final String NAME = "cake";
+}
+```
+
+当然，主程序会打印出“pancake”。
+
+现在假设你不小心在另一个名为Dessert.java的源文件中也定义了同样的两个类：
+
+```java
+class Utensil {
+    static final String NAME = "pot";
+    static final String NAME = "pie";
+}
+```
+
+如果你侥幸是用命令javac Main.java Dessert.java来编译程序，那么编译就会失败，此时编译器会提醒你定义了多个Utensil和Dessert类。这是因为编译器会先编译Main.java，当它看到Utensil的引用（在Dessert引用之前），就会在Utensil.java中查看这个类，结果找到Utensil和Dessert这两个类。当编译器在命令行遇到Dessert.java时，也会去查找该文件，结果会遇到Utensil和Dessert这两个定义。
+
+如果用命令javac Main.java或者javac Main.java Utensil.java编译程序，结果将如同你还没有编写Dessert.java文件一样，输出pancake。程序的行为受源文件被传给编译器的顺序影响，这显然是让人无法接受的。
+
+这个问题的修正方法很简单，只要把顶级类（在本例中是指Utensil和Dessert）分别放入独立的源文件即可。如果一定要把多个顶级类放进一个源文件中，就要考虑使用静态成员类，以此代替将这两个类分到独立的源文件中去。如果这些类服从于另一个类，那么将它们做成静态成员类通常比较好，因为这样增强了代码的可读性，如果将这些类声明为私有的，还可以使它们减少被读取的概率。以下就是做成静态成员类的范例：
+
+```java
+public class Test {
+    public static void main(String[] args) {
+        System.out.println(Utensil.NAME + Dessert.NAME);
+    }
+
+    private static class Utensil {
+        static final String NAME = "pan";
+    }
+
+    private static class Dessert {
+        static final String NAME = "cake";
+    }
+}
+```
+
+结论显而易见：`永远不要把多个顶级类或者接口放在一个源文件中`。遵循这个原则可以确保编译时一个类不会有多个定义。这么做反过来也能确保编译产生的类文件，以及程序结果的行为，都不会受到源文件被传给编译器的顺序的影响。
+
+# 第26条：请不要使用原生态类型
+
+声明中具有一个或者多个类型参数的类或者接口，就是泛型类或者接口。例如，List接口就只有单个类型参数E，表示列表的元素类型。这个接口的全称是List<E>，但是人们经常把它简称为List。泛型类和接口统称为泛型。
+
+每一种泛型定义一组参数化的类型，构成格式为：先是类或者接口的名称，接着用尖括号（<>）把对应于泛型形式类型参数的实际类型参数列表括起来。例如，List<String>（读作“字符串列表”）是一个参数化的类型，表示元素为String的列表。（String是与形式的类型参数E相对应的实际类型参数。）
+
+最后一点，每一种泛型都定义一个原生态类型，即不带任何实际类型参数的泛型名称。例如，与List<E>相对应的原生态类型是List。原生态类型就像从类型声明中删除了所有泛型信息一样。它们的存在主要是为了与泛型出现之前的代码相兼容。
+
+在Java增加泛型之前，下面这个集合声明是值得参考的。从Java 9开始，它依然是合法，但是已经没什么参考价值了：
+
+```java
+private final Collection stamps = ...;
+```
+
+如果现在使用这条声明，并且不小心将一个coin放进了stamp集合中，这一错误的插入照样得以编译和运行，不会出错（不过编译器确实会发出一条模糊的警告信息）：
+
+```java
+stamps.add(new Coin(...));
+```
+
+直到从stamp集合中获取coin时才会收到一条错误提示：
+
+```java
+for (Iterator i = stamps.iterator(); i.hasNext(); ) {
+    Stamp stamp = (Stamp) i.next();
+    stamp.cancel();
+}
+```
+
+出错之后应该尽早发现，最好是编译时就发现。在本例中，直到运行时才发现错误，已经出错很久了，而且它在代码中所处的位置，距离包含错误的这部分代码已经很远了。一旦发现ClassCastException，就必须搜索代码，查找将coin放进stamp集合的方法调用。此时编译器帮不上忙，因为它无法理解这种注释：“Contains only Stamp instances”（只包含Stamp实例）。
+
+有个泛型之后，类型声明中可以包含以下信息，而不是注释：
+
+```java
+private final Collection<Stamp> stamps = ...;
+```
+
+通过这条声明，编译器知道stamps应该只包含Stamp实例，并给予保证，假设整个代码库在编译过程中都没有发出任何警告。当stamps利用一个参数化的类型进行声明时，错误的插入会产生一条编译时的错误消息，告诉你具体是哪里错误了。
+
+从集合中检索元素的时候，编译器会替你插入隐式的转换，并确保它们不会失败（依然假设所有代码都没有产生或者隐瞒任何编译警告）。假设不小心将coin插入stamp集合，这显得有点牵强，但这类问题却是真实的。例如，很容易想象有人会不小心将一个BigInteger实例放进一个原本只包含BIgDecimal实例的集合中。
+
+如上所述，使用原生态类型（没有类型参数的泛型）是合法的，但是永远不应该这么做。`如果使用原生态类型，就失掉了泛型在安全性和描述性方面的所有优势。`既然不应该使用原生态类型，为什么Java语言的设计者还要允许使用它们呢？这是为了提供兼容性。因为泛型出现的时候，Java平台即将进入它的第二个十年，已经存在大量没有使用泛型的Java代码。人们认为让所有这些代码保持合法，并且能够与使用泛型的新代码互用，这一点很重要。它必须合法才能将参数化类型的实例传递给那些被设计成使用普通类型的方法，反之亦然。这种需求被称作移植兼容性，促成了支持原生态类型，以及利用擦除实现泛型的决定。
+
+虽然不应该在新代码中使用像List这样的原生态类型，使用参数化的类型以允许插入任意对象（比如List<Object>）是可行的。原生态类型List和参数化的类型List<Object>之间到底有什么区别呢？不严格地说，前者逃避了泛型检查，后者则明确告知编译器，它能够持有任意类型的对象。虽然可以将List<String>传递给类型List的参数，但是不能将它传给类型List<Object>的参数。泛型有子类型化的规则，List<String>是原生态类型List的一个子类型，而不是参数化类型List<Object>的子类型。因此，如果使用像List这样的原生态类型，就会失掉类型安全性，但是如果使用像List<Object>这样的参数化类型，则不会。
+
+为了更具体地进行说明，请参考下面的程序：
+
+```java
+public static void main(String[] args) {
+    List<String> strings = new ArrayList<>();
+    unsafeAdd(strings, Integer.valueOf(42));
+    String s = strings.get(0);
+}
+
+private static void unsafeAdd(List list, Object o) {
+    list.add(o);
+}
+```
+
+这段程序可以进行编译，但是因为它使用了原生态类型List，你会收到一条警告：
+
+```java
+Test.java:10:warning: [unchecked] unchecked call to add(E) as a memeber of the raw type list
+    list.add(o);
+```
+
+实际上，如果运行这段程序，在程序试图将strings.get(0)的调用结果Integer转换成String时，你会收到一个ClassCastException异常。这是一个编译器生成的转换，因此一般保证会成功，但是我们在这个例子中忽略了一条编译器警告，为此付出了代价。
+
+如果在unsafeAdd声明中用参数化类型List<Object>代替原生态类型List，并试着重新编译这段程序，会发现它无法再进行编译了，并发出以下错误消息：
+
+```java
+Test.java:5 error: incompatible types: List<String> cannot be converted to List<Object>
+    unsafeAdd(strings, Integer.valueOf(42));
+```
+
+在不确定或者不在乎集合中的元素类型的情况下，你也许会使用原生态类型。例如，假设想要编写一个方法，它有两个集合，并从中返回它们共有元素的数量。如果你对泛型还不熟悉，可以参考以下方式来编写这种方法：
+
+```java
+static int numElementsInCommon(Set s1, Set s2) {
+    int result = 0;
+    for (Object o1 : s1) {
+        if (s2.contains(o1)) {
+            result++;
+        }
+    }
+    return result;
+}
+```
+
+这个方法可行，但它使用了原生态类型，这是很危险的。安全的替代做法是使用无限制的通配符类型。如果要使用泛型，但不确定或者不关心实际的类型参数，就可以用一个问号代替。例如，泛型Set<E>的无限制通配符类型为Set<?>（读作”某个类型的集合”）。这是最普通的参数化Set类型，可以持有任何集合。下面是numElementsInCommon方法使用了无限制通配符类型时的情形：
+
+```java
+static int numElementsInCommon(Set<?> s1, Set<?> s2) {}
+```
+
+无限制通配类型Set<?>和原生态类型Set之间有什么区别呢？这个问号真正起到作用了吗？这一点不需要赘述，但通配符类型是安全的，原生态类型则不安全。由于可以将任何元素放进使用原生态类型的集合中，因此很容易破坏该集合的类型约束条件；但`不能讲任何元素（除了null之外）放到Collection<?>中。`如果尝试这么做，将会产生一条像这样的编译时错误消息：
+
+```java
+WildCard.java:13: error: incompatible types: String cannot be converted to CAP#1
+    c.add("verboten");
+          ^
+    where CAP#1 is a fresh type-variable:
+    CAP#1 extends Object from capture of ?
+```
+
+这样的错误消息显然无法令人满意，但是编译器已经尽到了它的职责，防止你破坏集合的类型约束条件。你不仅无法将任何元素（除了null之外）放进Collection<?>中，而且根本无法猜测你会得到哪种类型的对象。要是无法接受这些限制，就可以使用泛型方法或者有限制的通配符类型。
+
+不要使用原生态类型，这条规则有几个小小的例外。`必须在类文字中使用原生态类型。`规范不允许使用参数化类型（虽然允许数组类型和基本类型）。换句话说，List.class、String[].class和int.class都合法，但是List<String>.class和List<?>.class则不合法。
+
+这条规则的第二个例外与instanceof操作符有关。由于泛型信息可以在运行时被擦除，因此在参数化类型而非无限制通配符类型上使用instanceof操作符是非法的。`用无限制通配符类型代替原生态类型，对instanceof操作符不会产生任何影响。`在这种情况下，尖括号（<>）和问号（?）就显得多余了。`下面是利用泛型来使用instanceof操作符的首选非法：`
+
+```java
+if (o instanceof Set) {
+    Set<?> s = (Set<?>) o;
+}
+```
+
+注意，一旦确定这个o是个Set，就必须将它转换成通配符类型Set<?>，而不是转换成原生态类型Set。这是个受检的转换，因此不会导致编译时警告。
+
+总而言之，使用原生态类型会在运行时导致异常，因此不要使用。原生态类型只是为了与引入泛型之前的遗留代码进行兼容和互用而提供的。Set<Object>是个参数化类型，表示可以包含任何对象类型的一个集合；Set<?>则是一个通配符类型，表示只能包含某种未知对象类型的一个集合；Set是一个原生态类型，它脱离了泛型系统。前两种是安全的，最后一种不安全。
