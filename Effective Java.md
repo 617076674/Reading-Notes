@@ -2292,7 +2292,7 @@ for (Iterator i = stamps.iterator(); i.hasNext(); ) {
 
 出错之后应该尽早发现，最好是编译时就发现。在本例中，直到运行时才发现错误，已经出错很久了，而且它在代码中所处的位置，距离包含错误的这部分代码已经很远了。一旦发现ClassCastException，就必须搜索代码，查找将coin放进stamp集合的方法调用。此时编译器帮不上忙，因为它无法理解这种注释：“Contains only Stamp instances”（只包含Stamp实例）。
 
-有个泛型之后，类型声明中可以包含以下信息，而不是注释：
+有了泛型之后，类型声明中可以包含以下信息，而不是注释：
 
 ```java
 private final Collection<Stamp> stamps = ...;
@@ -2300,7 +2300,7 @@ private final Collection<Stamp> stamps = ...;
 
 通过这条声明，编译器知道stamps应该只包含Stamp实例，并给予保证，假设整个代码库在编译过程中都没有发出任何警告。当stamps利用一个参数化的类型进行声明时，错误的插入会产生一条编译时的错误消息，告诉你具体是哪里错误了。
 
-从集合中检索元素的时候，编译器会替你插入隐式的转换，并确保它们不会失败（依然假设所有代码都没有产生或者隐瞒任何编译警告）。假设不小心将coin插入stamp集合，这显得有点牵强，但这类问题却是真实的。例如，很容易想象有人会不小心将一个BigInteger实例放进一个原本只包含BIgDecimal实例的集合中。
+从集合中检索元素的时候，编译器会替你插入隐式的转换，并确保它们不会失败（依然假设所有代码都没有产生或者隐瞒任何编译警告）。假设不小心将coin插入stamp集合，这显得有点牵强，但这类问题却是真实的。例如，很容易想象有人会不小心将一个BigInteger实例放进一个原本只包含BigDecimal实例的集合中。
 
 如上所述，使用原生态类型（没有类型参数的泛型）是合法的，但是永远不应该这么做。`如果使用原生态类型，就失掉了泛型在安全性和描述性方面的所有优势。`既然不应该使用原生态类型，为什么Java语言的设计者还要允许使用它们呢？这是为了提供兼容性。因为泛型出现的时候，Java平台即将进入它的第二个十年，已经存在大量没有使用泛型的Java代码。人们认为让所有这些代码保持合法，并且能够与使用泛型的新代码互用，这一点很重要。它必须合法才能将参数化类型的实例传递给那些被设计成使用普通类型的方法，反之亦然。这种需求被称作移植兼容性，促成了支持原生态类型，以及利用擦除实现泛型的决定。
 
@@ -2356,7 +2356,7 @@ static int numElementsInCommon(Set s1, Set s2) {
 static int numElementsInCommon(Set<?> s1, Set<?> s2) {}
 ```
 
-无限制通配类型Set<?>和原生态类型Set之间有什么区别呢？这个问号真正起到作用了吗？这一点不需要赘述，但通配符类型是安全的，原生态类型则不安全。由于可以将任何元素放进使用原生态类型的集合中，因此很容易破坏该集合的类型约束条件；但`不能讲任何元素（除了null之外）放到Collection<?>中。`如果尝试这么做，将会产生一条像这样的编译时错误消息：
+无限制通配类型Set<?>和原生态类型Set之间有什么区别呢？这个问号真正起到作用了吗？这一点不需要赘述，但通配符类型是安全的，原生态类型则不安全。由于可以将任何元素放进使用原生态类型的集合中，因此很容易破坏该集合的类型约束条件；但`不能将任何元素（除了null之外）放到Collection<?>中。`如果尝试这么做，将会产生一条像这样的编译时错误消息：
 
 ```java
 WildCard.java:13: error: incompatible types: String cannot be converted to CAP#1
@@ -2370,7 +2370,7 @@ WildCard.java:13: error: incompatible types: String cannot be converted to CAP#1
 
 不要使用原生态类型，这条规则有几个小小的例外。`必须在类文字中使用原生态类型。`规范不允许使用参数化类型（虽然允许数组类型和基本类型）。换句话说，List.class、String[].class和int.class都合法，但是List<String>.class和List<?>.class则不合法。
 
-这条规则的第二个例外与instanceof操作符有关。由于泛型信息可以在运行时被擦除，因此在参数化类型而非无限制通配符类型上使用instanceof操作符是非法的。`用无限制通配符类型代替原生态类型，对instanceof操作符不会产生任何影响。`在这种情况下，尖括号（<>）和问号（?）就显得多余了。`下面是利用泛型来使用instanceof操作符的首选非法：`
+这条规则的第二个例外与instanceof操作符有关。由于泛型信息可以在运行时被擦除，因此在参数化类型而非无限制通配符类型上使用instanceof操作符是非法的。`用无限制通配符类型代替原生态类型，对instanceof操作符不会产生任何影响。`在这种情况下，尖括号（<>）和问号（?）就显得多余了。`下面是利用泛型来使用instanceof操作符的首选方法：`
 
 ```java
 if (o instanceof Set) {
@@ -2381,3 +2381,81 @@ if (o instanceof Set) {
 注意，一旦确定这个o是个Set，就必须将它转换成通配符类型Set<?>，而不是转换成原生态类型Set。这是个受检的转换，因此不会导致编译时警告。
 
 总而言之，使用原生态类型会在运行时导致异常，因此不要使用。原生态类型只是为了与引入泛型之前的遗留代码进行兼容和互用而提供的。Set<Object>是个参数化类型，表示可以包含任何对象类型的一个集合；Set<?>则是一个通配符类型，表示只能包含某种未知对象类型的一个集合；Set是一个原生态类型，它脱离了泛型系统。前两种是安全的，最后一种不安全。
+
+# 第27条：消除非受检的警告
+
+用泛型编程时会遇到许多编译器警告：非受检转换警告、非受检方法调用警告、非受检参数化可变参数类型警告，以及非受检转换警告。当你越来越熟悉泛型之后，遇到的警告也会越来越少，但是不要期待一开始用泛型编写代码就可以正确地进行编译。
+
+有许多非受检警告很容易消除。例如，假设以外地编写了这样一个声明：
+
+```java
+Set<Lark> exaltation = new HashSet();
+```
+
+编译器会细致地提醒你哪里出错了：
+
+```java
+Venery.java:4: warning: [unchecked] unchecked conversion
+    Set<Lark> exaltation = new HashSet();
+  required: Set<Lark>
+  found: HashSet
+```
+
+你就可以纠正所显示的错误，消除警告。注意，不必真正去指定类型参数，只需要用在Java 7中开始引入的菱形操作符（<>）将它括起来即可。随后编译器就会推测出正确的实际类型参数：
+
+```java
+Set<Lark> exaltation = new HashSet<>();
+```
+
+有些警告非常难以消除。当你遇到需要进行一番思考的警告时，要坚持住。要尽可能地消除每一个非受检警告。如果消除了所有警告，就可以确保代码是类型安全的，这是一件很好的事情。这意味着不会在运行时出现ClassCastException异常，你会更加自信自己的程序可以实现预期的功能。
+
+`如果无法消除警告，同时可以证明引起警告的代码是类型安全的，（只有在这种情况下）才可以用一个@SuppressWarnings("unchecked")注解来禁止这条警告。`如果在禁止警告之前没有先证实代码是类型安全的，那就只是给你自己一种错误的安全感而已。代码在编译的时候可能没有出现任何警告，但它在运行时仍然会抛出ClassCastException异常。但是如果忽略（而不是禁止）明知道是安全的非受检警告，那么当新出现一条真正有问题的警告时，你也不会注意到。新出现的警告就会淹没在所有的错误警告声当中。
+
+SuppressWarnings注解可以用在任何粒度的级别中，从单独的局部变量声明到整个类都可以。`应该始终在尽可能小的范围内使用SuppressWarnings注解。`它通常是个变量声明，或是非常简短的方法或构造器。永远不要在整个类上使用SuppressWarnings，这么做可能会掩盖重要的警告。
+
+如果你发现自己在长度不止一行的方法或者构造器中使用了SuppressWarnings注解，可以将它移到一个局部变量的声明中。虽然你必须声明一个新的局部变量，不过这么做还是值得的。例如，看看ArrayList类当中的toArray方法：
+
+```java
+public <T> T[] toArray(T[] a) {
+    if(a.length < size) {
+        return (T[]) Arrays.copyOf(elements, size, a.getClass());
+    }
+    System.arraycopy(elements, 0, a, 0, size);
+    if (a.length > size) {
+        a[size] = null;
+    }
+    return a;
+}
+```
+
+如果编译ArrayList，该方法就会产生这条警告：
+
+```java
+ArrayList.java:305: warning: [unchecked] unchecked cast
+    return (T[]) Arrays.copyOf(elements, size, a.getClass());
+  required: T[]
+  found: Object[]
+```
+
+将SuppressWarnings注解放在return语句中是不合法的，因为它不是声明。你可以试着将注解放在整个方法上，但是在实践中千万不要这么做，而是应该声明一个局部变量来保存返回值，并注解其声明，像这样：
+
+```java
+public <T> T[] toArray(T[] a) {
+    if (a.length < size) {
+        @SuppressWarnings("unchecked")
+        T[] result = (T[]) Arrays.copyOf(elements, size, s.getClass());
+        return result;
+    }
+    System.arraycopy(elements, 0, a, 0, size);
+    if (a.length > size) {
+        a[size] = null;
+    }
+    return a;
+}
+```
+
+这个方法可以正确地编译，禁止非受检警告的范围也会减到最小。
+
+`每当使用SuppressWarnings("unchecked")注解时，都要添加一条注释，说明为什么这么做是安全的。`这样可以帮助其他人理解代码，更重要的是，可以尽量减少其他人修改代码后导致计算不安全的概率。如果你觉得这种注释很难编写，就要多加思考。最终你会发现非受检操作是非常不安全的。
+
+总而言之，非受检警告很重要，不要忽略它们。每一条警告都表示可能在运行时抛出ClassCastException异常。要尽最大的努力消除这些警告。如果无法消除非受检警告，同时可以证明引起警告的代码是类型安全的，就可以在尽可能小的范围内使用@SuppressWarnings("unchecked")注解禁止该警告。要用注释把禁止该警告的原因记录下来。
