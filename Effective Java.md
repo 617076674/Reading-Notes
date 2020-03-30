@@ -2459,3 +2459,129 @@ public <T> T[] toArray(T[] a) {
 `每当使用SuppressWarnings("unchecked")注解时，都要添加一条注释，说明为什么这么做是安全的。`这样可以帮助其他人理解代码，更重要的是，可以尽量减少其他人修改代码后导致计算不安全的概率。如果你觉得这种注释很难编写，就要多加思考。最终你会发现非受检操作是非常不安全的。
 
 总而言之，非受检警告很重要，不要忽略它们。每一条警告都表示可能在运行时抛出ClassCastException异常。要尽最大的努力消除这些警告。如果无法消除非受检警告，同时可以证明引起警告的代码是类型安全的，就可以在尽可能小的范围内使用@SuppressWarnings("unchecked")注解禁止该警告。要用注释把禁止该警告的原因记录下来。
+
+# 第28条：列表优于数组
+
+数组与泛型相比，有两个重要的不同点。首先，数组是协变的。这个词听起来有点吓人，其实只是表示如果Sub为Super的子类型，那么数组Sub[]就是Super[]的子类型。相反，泛型是可变的：对于任意两个不同的类型Type1和Type2，List<Type1>既不是List<Type2>的子类型，也不是List<Type2>的超类型。你可能认为，这意味着泛型是有缺陷的，但实际上可以说数组才是有缺陷的。下面的代码片段是合法的：
+
+```java
+// Fails at runtime!
+Object[] objectArray = new Long[1];
+objectArray[0] = "I don't fit in";
+```
+
+但下面这段代码则不合法：
+
+```java
+// Won't compile!
+List<Object> ol = new ArrayList<Long>();
+ol.add("I don't fit in");
+```
+
+这其中无论哪一种方法，都不能将String放进Long容器中，但是利用数组，你会在运行时才发现所犯的错误；而利用列表，则可以在编译时就发现错误。我们当然系统在编译时就发现错误。
+
+数组与泛型之间的第二大区别在于，数组是具体化的。因此数组会在运行时知道和强化它们的元素类型。如上所述，如果企图将String保存到Long数组中，就会得到一个ArrayStoreException异常。相比之下，泛型则是通过擦除来实现的。这意味着，泛型只在编译时强化它们的类型信息，并在运行时丢弃（或者擦除）它们的元素类型信息。擦除就是使泛型可以与没有使用泛型的代码随意进行互用，以确保在Java 5中平滑过渡到泛型。
+
+由于上述这些根本的区别，因此数组和泛型不能很好地混合使用。例如，创建泛型、参数化类型或者类型参数的数组是非法的。这些数组创建表达式没有一个是合法的：new List<E>[]、new List<String>[]和new E[]。这些在编译时都会导致一个泛型数组创建错误。
+
+为什么创建泛型数组是非法的？因为它不是类型安全的。要是它合法，编译器在其他正确的程序中发生的转换就会在运行时失败，并出现一个ClassCastException异常。这就违背了泛型系统提供的基本保证。
+
+为了更具体地对比进行说明，以下面的代码片段为例：
+
+```java
+List<String>[] stringLists = new List<String>[1]; //(1)
+List<Integer> intList = List.of(42);  //(2)
+Object[] objects = stringLists; //(3)
+objects[0] = intList; //(4)
+String s = stringLists[0].get(0); //(5)
+```
+
+我们假设第1行是合法的，它创建了一个泛型数组。第2行创建并初始化了一个包含单个元素的List<Integer>。第3行将List<String>数组保存到一个Object数组变量中，这是合法的，因为数组是协变的。第4行将List<Integer>保存到Object数组里唯一的元素中，这是可以的，因为泛型是通过擦除实现的：List<Integer>实例的运行时类型只是List，List<String>[]实例的运行时类型则是List[]，因此这种安排不会产生ArrayStoreException异常。但现在我们有麻烦了，我们将一个List<Integer>实例保存到了原本声明只包含List<String>实例的数组中。在第5行中，我们从这个数组里唯一的列表中获取了唯一的元素。编译器自动地将获取到的元素转换成String，但它是一个Integer，因此，我们在运行时得到了一个ClassCastException异常。为了防止出现这种情况，（创建泛型数组的）第1行必须产生一条编译时错误。
+
+从技术的角度来说，像E、List<E>和List<String>这样的类型应称作不可具体化的类型。直观地说，`不可具体化的类型是指其运行时表示法包含的信息比它的编译时表示法包含的信息更少的类型`。`唯一可具体化的参数化类型是无限制的通配符类型，如List<?>和Map<?, ?>`。`虽然不常用，但是创建无限制通配类型的数组是合法的`。
+
+禁止创建泛型数组可能有点讨厌。例如，这表明泛型一般不可能返回它的元素类型数组。这也意味着在结合使用可变参数方法和泛型时会出现令人费解的警告。这是由于每当调用可变参数方法时，就会创建一个数组来存放varargs参数。如果这个数组的元素类型是不可具体化的，就会得到一条警告。利用SafeVarargs注解可以解决这个问题。
+
+当你得到泛型数组创建错误时，最好的解决办法通常是优先使用集合类型List<E>，而不是数组类型E[]。这样可能会损失一些性能或者间接性，但是换回的确是更高的类型安全性和互用性。
+
+例如，假设要通过构造器编写一个带有集合的Chooser类和一个方法，并用该方法返回在集合中随机选择的一个元素。根据传给构造器的集合类型，可以用chooser充当游戏用的色子、魔术8球（一种卡片棋牌游戏），或者一个蒙特卡罗模拟的数据源。下面是一个没有使用泛型的简单实现：
+
+```java
+public class Chooser {
+    private final Object[] choiceArray;
+
+    public Chooser(Collection choices) {
+        choiceArray = choices.toArray();
+    }
+
+    public Object choose() {
+        Random rnd = ThreadLocalRandom.current();
+        return choiceArray[rnd.nextInt(choiceArray.length)];
+    }
+}
+```
+
+要使用这个类，必须将choose方法的返回值，从Object转换成每次调用该方法时想要的类型，如果搞错类型，转换就会在运行时失败。将Chooser修改成泛型：
+
+```java
+public class Chooser<T> {
+    private final T[] choiceArray;
+
+    public Chooser(Collection<T> choices) {
+        choiceArray = choices.toArray();
+    }
+
+    public Object choose() {
+        Random rnd = ThreadLocalRandom.current();
+        return choiceArray[rnd.nextInt(choiceArray.length)];
+    }
+}
+```
+
+如果试着编译这个类，将会得到以下错误消息：
+
+```
+Chooser.java:9: error: incompatible types: Object[] cannot be converted to T[]
+    choiceArray = choices.toArray();
+  where T is a type-variable:
+    T extends Object declared in class Chooser
+```
+
+你可能会说：这没什么大不了的，我可以把Object数组转换成T数组：
+
+```java
+choiceArray = (T[]) choices.toArray();
+```
+
+这样做的确消除了错误消息，但是现在得到了一条警告：
+
+```
+Chooser.java:9: warning: [unchecked] unchecked cast
+    choiceArray = (T[]) choices.toArray();
+  required: T[], found: Object[]
+  where T is a type-variable:
+T extends Object declared in class Chooser
+```
+
+编译器告诉你，它无法在运行时检查转换的安全性，因为程序在运行时还不知道T是什么——记住，元素类型信息会在运行时从泛型中被擦除。这段程序可以运行吗？可以，但是编译器无法证明这一点。你可以亲自证明，只要将证据放在注释中，用一条注解禁止警告，但是最好能消除造成警告的根源。
+
+要消除未受检的转换警告，必须选择用列表代替数组。下面是编译时没有出错或者警告的Chooser类版本：
+
+```java
+public class Chooser<T> {
+    private final List<T> choiceList;
+
+    public Chooser(Collection<T> choices) {
+        choiceList = new ArrayList<>(choices);
+    }
+
+    public T choose() {
+        Random rnd = ThreadLocalRandom.current();
+        return choiceList.get(rnd.nextInt(choiceList.size()));
+    }
+}
+```
+
+这个版本的代码稍微冗长一些，运行速度可能也会慢一些，但是在运行时不会得到ClassCastException异常。
+
+总而言之，数组和泛型有着截然不同的类型规则。数组是协变且可以具体化的；泛型是不可变的且可以被擦除的。因此，数组提供了运行时的类型安全，但是没有贬义时的类型安全，反之，对于泛型也一样。一般来说，数组和泛型不能很好地混合使用。如果你发现自己将它们混合起来使用，并且得到了编译时错误或者警告，应该用列表代替数组。
