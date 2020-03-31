@@ -2585,3 +2585,171 @@ public class Chooser<T> {
 这个版本的代码稍微冗长一些，运行速度可能也会慢一些，但是在运行时不会得到ClassCastException异常。
 
 总而言之，数组和泛型有着截然不同的类型规则。数组是协变且可以具体化的；泛型是不可变的且可以被擦除的。因此，数组提供了运行时的类型安全，但是没有贬义时的类型安全，反之，对于泛型也一样。一般来说，数组和泛型不能很好地混合使用。如果你发现自己将它们混合起来使用，并且得到了编译时错误或者警告，应该用列表代替数组。
+
+# 第29条：优先考虑泛型
+
+一般来说，将集合声明参数化，以及使用JDK所提供的泛型方法，这些都不太困难。编写自己的泛型会比较困难一些，但是值得花些时间去学习如何编写。
+
+以第7条中简单的堆栈实现为例：
+
+```java
+public class Stack {
+    private Object[] elements;
+
+    private int size = 0;
+
+    private static final int DEFAULT_INITIAL_CAPACITY = 16;
+
+    public Stack() {
+        elements = new Object[DEFAULT_INITIAL_CAPACITY];
+    }
+
+    public void push(Object e) {
+        ensureCapacity();
+        elements[size++] = e;
+    }
+
+    public Object pop() {
+        if (size == 0) {
+            throw new EmptyStackException();
+        }
+        return elements[--size];
+    }
+
+    private void ensureCapacity() {
+        if (elements.length == size) {
+            elements = Arrays.copyOf(elements, 2 * size + 1);
+        }
+    }
+}
+```
+
+这个类应该先被参数化，但是它没有，我们可以在后面将它泛型化。换句话说，可以将它参数化，而又不破坏原来非参数化版本的客户端代码。也就是说，客户端必须转换从堆栈里弹出的对象，以及可能在运行时失败的那些转换。将类泛型化的第一步是在它的声明中添加一个或者多个类型参数。在这个例子中有一个类型参数，它表示堆栈的元素类型，这个参数的名称通常为E。
+
+```java
+public class Stack<E> {
+    private E[] elements;
+
+    private int size = 0;
+
+    private static final int DEFAULT_INITIAL_CAPACITY = 16;
+
+    public Stack() {
+        elements = new E[DEFAULT_INITIAL_CAPACITY];
+    }
+
+    public void push(E e) {
+        ensureCapacity();
+        elements[size++] = e;
+    }
+
+    public E pop() {
+        if (size == 0) {
+            throw new EmptyStackException();
+        }
+        E result = elements[--size];
+        elements[size] = null;
+        return result;
+    }
+
+    private void ensureCapacity() {
+        if (elements.length == size) {
+            elements = Arrays.copyOf(elements, 2 * size + 1);
+        }
+    }
+}
+```
+
+这个类会产生一个错误，内容如下：
+
+```
+Stack.java:8: generic array creation
+    elements = new E[DEFAULT_INITIAL_CAPACITY];
+```
+
+如第28条中所述，你不能创建不可具体化的类型的数组，如E。每当编写用数组支持的泛型时，都会出现这个问题。解决这个问题有两种方法。第一种，直接绕过创建泛型数组的禁令：创建一个Object的数组，并将它转换成泛型数组类型。现在错误是消除了，但是编译器会产生一条警告。这种用法是合法的，但（整体上而言）不是类型安全的：
+
+```
+Stack.java:8: warning: [unchecked] unchecked cast found: Object[], required: E[]
+    elements = (E[]) new Object[DEFAULT_INITIAL_CAPACITY];
+                   ^
+```
+
+编译器不可能证明你的程序是类型安全的，但是你可以。你自己必须确保未受检的转换不会危及程序的类型安全性。相关的数组（即elements变量）保存在一个私有的域中，永远不会被返回到客户端，或者传给任何其他方法。这个数组中保存的唯一元素，是传给push方法的那些元素，它们的类型为E，因此未受检的转换不会有任何危害。
+
+一旦你证明了未受检的转换是安全的，就要在尽可能小的范围中禁止警告。在这种情况下，构造器只包含未受检的数组创建，因此可以在整个构造器中禁止这条警告。通过增加一条注解@SuppressWarnings来完成禁止，Stack能够正确无误地进行编译，你就可以使用它了，无须显式的转换，也无须担心会出现ClassCastException异常：
+
+```java
+// The elements array will contain only E instances from push(E).
+// This is sufficient to ensure type safety, but the runtime type
+// of the array won't be E[]; it will always be Object[]!
+@SuppressWarnings("unchecked")
+public Stack() {
+    elements = (E[]) new Object[DEFAULT_INITIAL_CAPACITY];
+}
+```
+
+消除Stack中泛型数组创建错误的第二种办法是，将elements域的类型从E[]改为Object[]。这么做会得到一条不同的错误：
+
+```
+Stack.java:19: incompatible types
+found: Object, required: E
+    E result = elements[--size];
+                        ^
+```
+
+通过把从数组中获取到的元素由Object转换成E，可以将这条错误变成一条警告：
+
+```
+Stack.java:19: warning: [unchecked] unchecked cast
+found: Object, required: E
+    E result = (E) elements[--size];
+                            ^
+```
+
+由于E是一个不可具体化的类型，编译器无法在运行时检验转换。你还是可用自己证实未受检的转换是安全的，因此可以禁止该警告。根据第27条的建议，我们只要在包含未受检转换的任务上禁止警告，而不是在整个pop方法上禁止就可以了，方法如下：
+
+```java
+// Appropriate suppression of unchecked warning
+public E pop() {
+    if (size == 0) {
+        throw new EmptyStackException();
+    }
+    // push requires elements to be of type E, so cast is correct
+    @SuppressWarnings("unchecked")
+    E result = (E) elements[--size];
+    elements[size] = null;  // Eliminate obsolete reference
+    return result;
+}
+```
+
+这两种消除泛型数组创建的方法，各有所长。第一种方法的可读性更强：数组被声明为E[]类型清楚地表明它只包含E实例。它也更加简洁：在一个典型的泛型类中，可以在代码中的多个地方读取到该数组；第一种方法只需要转换一次（创建数组的时候），而第二种方法则是每次读取一个数组元素时都需要转换一次。因此，第一种方法优先，在实践中叶更常用。但是，它会导致堆污染：数组的运行时类型与它的编译时类型不匹配（除非E正好是Object）。这使得有些程序员会觉得很不舒服，因而选择第二种方案，虽然堆污染在这种情况下并没有什么危害。
+
+下面的程序示范了泛型Stack类的使用方法。程序以倒序的方式打印出它的命令行参数，并转换成大写字母。如果要在从堆栈中弹出的元素上调用String的toUpperCase方法，并不需要显式的转换，并且确保自动生成的转换会成功:
+
+```java
+// Little program to exercise our generic Stack
+public static void main(String[] args) {
+    Stack<String> stack = new Stack<>();
+    for (String arg : args) {
+        stack.push(arg);
+    }
+    while (!stack.isEmpty()) {
+        System.out.println(stack.pop().toUpperCase());
+    }
+}
+```
+
+看来上述的示例与第28条相矛盾了，第28条鼓励优先使用列表而非数组。实际上不可能总是或者总想在泛型中使用列表。Java并不是生来就支持列表，因此有些泛型如ArrayList，必须在数组上实现。为了提升性能，其他泛型如HashMap也在数组上实现。
+
+绝大多数泛型就像我们的Stack示例一样，因为它们的类型参数没有限制：你可以创建Stack<Object>、Stack<int[]>、Stack<List<String>>，或者任何其他对象引用类型的Stack。注意不能创建基本类型的Stack：企图创建Stack<int>或者Stack<double>会产生一个编译时错误。这是Java泛型系统的一个基本局限性。你可以通过使用基本包装类型来避开这条限制。
+
+有一些泛型限制了可允许的类型参数值。例如，以java.util.concurrent.DelayQueue为例，其声明内容如下：
+
+```java
+class DelayQueue<E extends Delayed> implements BlockingQueue<E> {}
+```
+
+类型参数列表（<E extends Delayed>）要求实际的类型参数E必须是java.util.concurrent.Delayed的一个子类型。它允许DelayQueue实现及其客户端在DelayQueue的元素上利用Delayed方法，无须显式的转换，也没有出现ClassCastException的风险。类型参数E被称作有限制的类型参数。注意，子类型关系确定了，每个类型都是它自身的子类型，因此创建DelayQueue<Delayed>是合法的。
+
+总而言之，使用泛型比使用需要在客户端代码中进行转换的类型来得更加安全，也更加容易。在设计新类型的时候，要确保它们不需要这种转换就可以使用。这通常意味着要把类做成是泛型的。只要时间允许，就把现有的类型都泛型化。这对于这些类型的新用户来说会变得更加轻松，又不会破坏现有的客户端。

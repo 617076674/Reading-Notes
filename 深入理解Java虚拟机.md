@@ -383,7 +383,7 @@ Java程序会通过栈上的reference数据来操作堆上的具体对象，主�
 ### 2.4.2 虚拟机栈和本地方法栈溢出
 ### 2.4.3 方法区和运行时常量池溢出
 
-String::intern()是一个本地方法，它的作用是如果字符串常量池中已经包含一个等于此String对象的字符串，则返回代表池中这个字符串的String对象的引用；否则，会将此String对象包含的字符串添加到常量池中，并且返回此String对象的引用。
+String::intern()是一个本地方法，它的作用是如果字符串常量池中已经包含一个等于此String对象的字符串，则返回代表池中这个字符串的String对象的引用；否则，会将此String对象包含的字符串添加到常量池中，并且返回常量池中此String对象的引用。
 
 ```java
 public class RuntimeConstantPoolOOM {
