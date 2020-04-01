@@ -2753,3 +2753,111 @@ class DelayQueue<E extends Delayed> implements BlockingQueue<E> {}
 类型参数列表（<E extends Delayed>）要求实际的类型参数E必须是java.util.concurrent.Delayed的一个子类型。它允许DelayQueue实现及其客户端在DelayQueue的元素上利用Delayed方法，无须显式的转换，也没有出现ClassCastException的风险。类型参数E被称作有限制的类型参数。注意，子类型关系确定了，每个类型都是它自身的子类型，因此创建DelayQueue<Delayed>是合法的。
 
 总而言之，使用泛型比使用需要在客户端代码中进行转换的类型来得更加安全，也更加容易。在设计新类型的时候，要确保它们不需要这种转换就可以使用。这通常意味着要把类做成是泛型的。只要时间允许，就把现有的类型都泛型化。这对于这些类型的新用户来说会变得更加轻松，又不会破坏现有的客户端。
+
+# 第30条：优先考虑泛型方法
+
+正如类可以从泛型中受益一般，方法也一样。静态工具方法尤其适合于泛型化。Collections中的所有“算法”方法（例如binarySearch和sort）都泛型化了。
+
+编写泛型方法与编写泛型类型相类似。例如下面这个方法，它返回两个集合的联合：
+
+```java
+public static Set union(Set s1, Set s2) {
+    Set result = new HashSet(s1);
+    result.addAll(s2);
+    return result;
+}
+```
+
+这个方法可以编译，但是有两条警告：
+
+```
+Union.java:5: warning: [unchecked] unchecked call to HashSet(Collection<? extends E>) as a member of raw type HashSet
+    Set result = new HashSet(s1);
+                 ^
+Union.java:6: warning: [unchecked] unchecked call to addAll(Collection<? extends E>) as a member of raw type Set
+    result.addAll(s2);
+                 ^
+```
+
+为了修正这些警告，使方法变成是类型安全的，要将方法声明修改为声明一个类型参数，表示这三个集合的元素类型（两个参数和一个返回值），并在方法中使用类型参数。`声明类型参数的类型参数列表，处在方法的修饰符及其返回值之间。`在这个示例中，类型参数列表为<E>，返回类型为Set<E>。类型参数的命名惯例与泛型方法以及泛型的相同：
+
+```java
+public static <E> Set<E> union(Set<E> s1, Set<E> s2) {
+    Set<E> result = new HashSet<>(s1);
+    result.addAll(s2);
+    return result;
+}
+```
+
+union方法的局限性在于三个集合的类型（两个输入参数和一个返回值）必须完全相同。利用`有限制的通配符类型`可以使方法变得更加灵活。
+
+有时可能需要创建一个不可变但又适用于许多不同类型的对象。由于泛型是通过擦除实现的，可以给所有必要的类型参数使用单个对象，但是需要编写一个静态工厂方法，让它重复地给每个必要的类型参数分发对象。这种模式称作泛型单例工厂，常用语函数对象，如Collections.reverseOrder，有时也用于像Collections.emptySet这样的集合。
+
+假设要编写一个恒等函数分发器。类库中提供了Function.identity，因此不需要自己编写，但是自己编写也很有意义。如果在每次需要的时候都重新创建一个，这样会很浪费，因为它是无状态的。如果Java泛型被具体化了，每个类型都需要一个恒等函数，但是它们被擦除后，就只需要一个泛型单例。请看以下示例：
+
+```java
+private static UnaryOperator<Object> IDENTITY_FN = (t) -> t;
+
+@SuppressWarnings("unchecked")
+public static <T> UnaryOperator<T> identityFunction() {
+    return (UnaryOperator<T>) IDENTITY_FN;
+}
+```
+
+IDENTITY_FN转换成(UnaryOperator<T>)，产生了一条未受检的转换警告，因为UnaryOperator<Object>对于每个T来说并非都是个UnaryOperator<T>。但是恒等函数很特殊：它返回未被修改的参数，因此我们知道无论T的值是什么，用它作为UnaryFunction<T>都是类型安全的。因此，我们可以放心地禁止由这个转换所产生的未受检转换警告。一旦禁止，代码在编译时就不会出现任何错误或者警告。
+
+下面是一个范例程序，它利用泛型单例作为UnaryFunction<String>和UnaryFunction<Number>。像往常一样，它不包含转换，编译时没有出现错误或者警告：
+
+```java
+public static void main(String[] args) {
+    String[] strings = {"jute", "hemp", "nylon"};
+    UnaryOperator<String> sameString = UnaryOperator.identityFunction();
+    for (String s : strings) {
+        System.out.println(sameString.apply(s));
+    }
+    Number[] numbers = {1, 2.0, 3L};
+    UnaryOperator<Number> sameNumber = UnaryOperator.identityFunction();
+    for (Number number : numbers) {
+        System.out.println(sameNumber.apply(number));
+    }
+}
+```
+
+虽然相对少见，但是通过某个包含该类型参数本身的表达式来限制参数类型是允许的。这就是`递归类型限制`.递归类型限制最普遍的用途与Comparable接口有关，它定义类型的自然顺序。这个接口的内容如下：
+
+```java
+public interface Comparable<T> {
+    int compareTo(T o);
+}
+```
+
+类型参数T定义的类型，可以与实现Comparable<T>的类型的元素进行比较。实际上，几乎所有的类型都只能与它们自身的类型的元素相比较。例如String实现Comparable<String>，Integer实现Comparable<Integer>。
+
+有许多方法都带有一个实现Comparable接口的元素列表，为了对列表进行排序，并在其中进行搜索，计算出它的最小值或者最大值，等等。要完成这其中的任何一项操作，都要求列表中的每个元素都能够与列表中的每个其他元素相比较，换句话说，列表的元素可以互相比较。下面是如何表达这种约束条件的一个示例：
+
+```java
+public static <E extends Comparable<E>> E max(Collection<E> c);
+```
+
+类型限制<E extends Comparable<E>>，可以读作“针对可以与自身进行比较的每个类型E”，这与互比性的概念或多或少有些一致。
+
+下面的方法就带有上述声明。它根据元素的自然顺序计算列表的最大值，编译时没有出现错误或者警告：
+
+```java
+public static <E extends Comparable<E>> E max(Collection<E> c) {
+    if (c.isEmpty()) {
+        throw new IllegalArgumentException("Empty collection");
+    }
+    E result = null;
+    for (E e : c) {
+        if (result == null || e.compareTo(result) > 0) {
+            result = Objects.requireNonNull(e);
+        }
+    }
+    return result;
+}
+```
+
+注意，如果列表为空，这个方法就会抛出IllegalArgumentException异常。更好的替代做法是返回一个Optional<E>。
+
+总而言之，泛型方法就像泛型一样，使用起来比要求客户端转换输入参数并返回值的方法来得更加安全，也更加容易。就像类型一样，你应该确保方法不用转换就能使用，这通常意味着要将它们泛型化。并且就像类型一样，还应该将现有的方法泛型化，使新用户使用起来更加轻松，且不会破坏现有的客户端。
