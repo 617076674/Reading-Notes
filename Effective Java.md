@@ -2331,7 +2331,7 @@ Test.java:10:warning: [unchecked] unchecked call to add(E) as a memeber of the r
 
 如果在unsafeAdd声明中用参数化类型List<Object>代替原生态类型List，并试着重新编译这段程序，会发现它无法再进行编译了，并发出以下错误消息：
 
-```java
+```
 Test.java:5 error: incompatible types: List<String> cannot be converted to List<Object>
     unsafeAdd(strings, Integer.valueOf(42));
 ```
@@ -2861,3 +2861,193 @@ public static <E extends Comparable<E>> E max(Collection<E> c) {
 注意，如果列表为空，这个方法就会抛出IllegalArgumentException异常。更好的替代做法是返回一个Optional<E>。
 
 总而言之，泛型方法就像泛型一样，使用起来比要求客户端转换输入参数并返回值的方法来得更加安全，也更加容易。就像类型一样，你应该确保方法不用转换就能使用，这通常意味着要将它们泛型化。并且就像类型一样，还应该将现有的方法泛型化，使新用户使用起来更加轻松，且不会破坏现有的客户端。
+
+# 第31条：利用有限制通配符来提升API的灵活性
+
+参数化类型是不变的。对于任何两个截然不同的类型Type1和Type2而言，List<Type1>既不是List<Type2>的子类型，也不是它的超类型。虽然List<String>不是List<Object>的子类型，但实际上很有意义。你可以将任何对象放进一个List<Object>中，却只能将字符串放进List<String>中。由于List<String>不能像List<Object>能做任何事情，它不是一个子类型。
+
+有时候，我们需要的灵活性要比不变类型所能提供的更多。
+
+```java
+public class Stack<E> {
+    public Stack();
+
+    public void push(E e);
+
+    public E pop();
+
+    public boolean isEmpty();
+}
+```
+
+假设我们想要增加一个方法，让它按顺序将一系列的元素全部放到堆栈中。第一次尝试如下：
+
+```java
+public void pushAll(Iterable<E> src) {
+    for (E e : src) {
+        push(e);
+    }
+}
+```
+
+这个方法编译时正确无误，但是并非尽如人意。如果Iterable的src元素类型与堆栈的完全匹配，就没有问题。但是假如有一个Stack<Number>，并且调用了push(intVal)，这里的intVal就是Integer类型。这是可以的，因为Integer是Number的一个子类型。因此从逻辑上来说，下面这个方法应该可行：
+
+```java
+Stack<Number> numberStack = new Stack<>();
+Iterable<Integer> integers = ...;
+numStack.pushAll(integers);
+```
+
+但是，如果尝试这么做，就会得到下面的错误消息，因为参数化类型是不可变的：
+
+```
+StackTest.java:7: error: incompatible types: Iterable<Integer> cannot be converted to Iterable<Number>
+    numberStack.pushAll(integers);
+                        ^
+```
+
+幸运的是，有一种解决办法。Java提供了一种特殊的参数化类型，称作`有限制的通配符类型`，它可以处理类似的情况。pushAll的输入参数类型不应该为“E的Iterable接口”，而应该为“E的某个子类型的Iterable接口”通配符类型Iterable<? extends E>正是这个意思。（使用关键字extends有些误导：确定了子类型后，每个类型都是自身的子类型，即便它没有将自身扩展。）我们修改一下pushAll来使用这个类型：
+
+```java
+public void pushAll(Iterable<? extends E> src) {
+    for (E e : src) {
+        push(e);
+    }
+}
+```
+
+修改之后，不仅Stack可以正确无误地编译，没有通过初始的pushAll声明进行编译的客户端代码也一样可以。因为Stack及其客户端正确无误地进行了编译，你就知道一切都是类型安全的了。
+
+现在假设想要编写一个popAll方法，使之与pushAll方法相呼应。popAll方法从堆栈中弹出每个元素，并将这些元素添加到指定的集合中。初次尝试编写的popAll方法可能像下面这样：
+
+```java
+public void popAll(Collection<E> dst) {
+    while (!isEmpty()) {
+        dst.add(pop());
+    }
+}
+```
+
+如果目标集合的元素类型与堆栈的完全匹配，这段代码编译时还是会正确无误，并且运行良好。但是，也并不意味着尽如人意。假设你有一个Stack<Number>和Collection<Object>类型的变量。如果从堆栈中弹出一个元素，并将它保存在该变量中，它的编译和运行都不会出错，那你为何不能也这么做呢？
+
+```java
+Stack<Number> numberStack = new Stack<Number>();
+Collection<Object> objects = ...;
+numberStack.popAll(objects);
+```
+
+如果试着用上述的popAll版本编译这段客户端代码，就会得到一个非常类似于第一次用pushAll时所得到的错误：Collection<Object>不是Collection<Number>的子类型。这一次通配符类型同样提供了一种解决办法。popAll的输入参数类型不应该为“E的集合”，而应该为“E的某种超类的集合”（这里的超类是确定的，因此E是它自身的一个超类型）。仍有一个通配符类型正符合此意：Collection<? super E>：
+
+```java
+public void popAll(Collection<? super E> dst) {
+    while (!isEmpty()) {
+        dst.add(pop());
+    }
+}
+```
+
+做了这个变动之后，Stack和客户端代码就都可以正确无误地编译了。
+
+结论很明显：`为了获得最大限度的灵活性，要在表示生产者或消费者的输入参数上使用通配符类型`。如果某个输入参数既是生产者，又是消费者，那么通配符类型对你就没有什么好处了：因为你需要的是严格的类型匹配，这是不用任何通配符而得到的。
+
+`PECS表示producer-extends，consumer-super。`换句话说，如果参数化类型表示一个生产者T，就使用<? extends T>；如果它表示一个消费者T，就使用<? super T>。在我们的Stack示例中，pushAll的src参数产生E实例供Stack使用，因此src相应的类型为Iterable<? extends E>；popAll的dst参数通过Stack消费E实例，因此dst相应的类型为Collection<? super E>。PECS这个助记符突出了使用通配符类型的基本原则。Naftalin和Wadler称之为`Get and Put Principle`。
+
+第28条有这样的声明：
+
+```java
+public Chooser(Collection<T> choices)
+```
+
+这个构造器只用choices集合来生成类型T的值（并把它们保存起来供后续使用），因此它的声明应该使用一个extends T的通配符类型。得到的构造器声明如下：
+
+```java
+public Chooser(Collection<? extends T> choices)
+```
+
+现在让我们看看第30条中的union方法。声明如下：
+
+```java
+public static <E> Set<E> union(Set<E> s1, Set<E> s2)
+```
+
+s1和s2这两个参数都是生产者E，因此根据PECS助记符，这个声明应该是：
+
+```java
+public static <E> Set<E> union(Set<? extends E> s1, Set<? extends> s2)
+```
+
+注意返回类型仍然是Set<E>。`不要用通配符类型作为返回类型。`除了为用户提供额外的灵活性之外，它还会强制用户在客户端代码中使用通配符类型。修改了声明之后，这段代码就能正确编译了：
+
+```java
+Set<Integer> integers = Set.of(1, 3, 5);
+Set<Double> doubles = Set.of(2.0, 4.0, 6.0);
+Set<Number> numbers = union(integers, doubles);
+```
+
+如果使用得当，通配符类型对于类的用户来说几乎是无形的。它们使方法能够接受它们应该接受的参数，并拒绝那些应该拒绝的参数。`如果类的用户必须考虑通配符类型，类的API或许就会出错。`
+
+第30条中的max方法初始声明如下：
+
+```java
+public static <T extends Comparable<T>> T max(List<T> list)
+```
+
+下面是修改过的使用通配符类型的声明：
+
+```java
+public static <T extends Comparable<? super T>> T max(List<? extends T> list)
+```
+
+为了从初始声明中得到修改后的版本，要应用PECS转换两次。最直接的是运用到参数list。它产生T实例，因此将类型从List<T>改成List<? extends T>。更灵活的是运用到类型参数T。这是我们第一次见到将通配符运用到类型参数。最初T被指定用来扩展Comparable<T>，但是Comparable消费T实例（并产生表示顺序关系的整值）。因此，参数化类型Comparable<T>被有限制通配符类型Comparable<? super T>取代。`Comparable始终是消费者，因此使用时始终应该是Comparable<? super T>优先于Comparable<T>`。`对于comparator接口也一样，因此使用时始终应该是Comparator<? super T>优先于Comparator<T>`。
+
+修改过的max声明很复杂，真的起作用了吗？下面是一个简单的列表示例，在初始声明中不允许这一，修改过的版本则可以：
+
+```java
+List<ScheduledFuture<?>> scheduledFuture = ...;
+```
+
+不能将初始方法声明运用到这个列表的原因在于，java.util.concurrent.ShceduledFuture没有实现Comparable<ScheduledFuture>接口。相反，它是扩展Comparable<Delayed>接口的Delayed接口的子接口。换句话说，ScheduleFuture实例并非只能与其他ScheduledFuture实例相比较；它可以与任何Delayed实例相比较，这就足以导致初始声明时就会被拒绝。更通俗地说，需要用通配符支持那些不直接实现Comparable（或者Comparator）而是扩展实现了该接口的类型。
+
+还有一个与通配符有关的话题值得探讨。类型参数和通配符之间具有双重性，许多方法都可以利用其中一个或者另一个进行声明。例如，下面是可能的两种静态方法声明，来交换列表中的两个被索引的项目。第一个使用无限制的类型参数，第二个使用无限制的通配符：
+
+```java
+public static <E> void swap(List<E> list, int i, int j);
+
+public static void swap(List<?> list, int i, int j);
+```
+
+你更喜欢这两种声明中的哪一种呢？为什么？在公共API中，第二种更好一些，因为它更简单。将它传到一个列表中（任何列表）方法就会交换被索引的元素。不用担心类型参数。一般来说，`如果类型参数只在方法声明中出现一次，就可以用通配符取代它`。如果是无限制的类型参数，就用无限制的通配符取代它；如果是有限制的类型参数，就用有限制的通配符取代它。
+
+将第二种声明用于swap方法会有一个问题。下面这个简单的实现不能编译：
+
+```java
+public static void swap(List<?> list, int i, int j) {
+    list.set(i, list.set(j, list.get(i)));
+}
+```
+
+试着编译时会发现这条没有什么用处的错误消息：
+
+```
+Swap.java:5: error: incompatible types: Object cannot be converted to CAP#1
+    list.set(i, list.set(j, list.get(i)));
+                                    ^
+  where CAP#1 is a fresh type-variable:
+    CAP#1 extends Object from capture of ?
+```
+
+不能将元素放回到刚刚从中取出的列表中，这似乎不太对劲。问题在于list的类型为List<?>，你不能把null之外的任何值放到List<?>中。幸运的是，有一种方式可以实现这个方法，无须求助于不安全的转换或者原生态类型。这种想法就是编写一个私有的辅助方法来捕捉通配符类型。为了捕捉类型，辅助方法必须是一个泛型方法，像下面这样：
+
+```java
+public static void swap(List<?> list, int i, int j) {
+    swapHelper(list, i, j);
+}
+
+private static <E> void swapHelper(List<E> list, int i, int j) {
+    list.set(i, list.set(j, list.get(i)));
+}
+```
+
+swapHelper方法知道list是一个List<E>。因此，它知道从这个列表中取出的任何值均为E类型，并且知道将E类型的任何值放进列表都是安全的。swap这个有些费解的实现编译起来却是正确无误的。它允许我们导出swap这个比较好的基于通配符的声明，同时在内部利用更加复杂的泛型方法。swap方法的客户端不一定要面对更加复杂的swapHelper声明，但是它们的确从中受益。值得一提的是，辅助方法中拥有的签名，正是我们在公有方法中因为它过于复杂而抛弃的。
+
+总而言之，在API中使用通配符类型虽然比较需要技巧，但是会使API变得灵活得多。如果编写的是将被广泛使用的类库，则一定要恰当地利用通配符类型。记住基本的原则：producer-extends，consumer-super（PECS）。还要记住所有的comparable和comparator都是消费者。
