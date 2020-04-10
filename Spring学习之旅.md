@@ -2583,11 +2583,11 @@ That said, if you intend to express annotation-driven injection by name, do not 
 
 For beans that are themselves defined as a collection, `Map`, or array type, `@Resource` is a fine solution, referring to the specific collection or array bean by unique name. That said, as of 4.3, collection, you can match `Map`, and array types through Spring's `Autowired` type matching algorithm as well, as well as the element type information is preserved in `@Bean` return type signatures or collection inheritance hierarchies. In this case, you can use qualifier values to select among same-typed collections, as outlined in the previous paragraph.
 
-As of 4.3, `@Autowired` also considers self references for injection (that is, references back to the bean that is currently injected). Not that self injection is a fallback. Regular dependencies on other components always have precedence. In that sense, self references do not participate in regular candidate selection and are therefore in particular never primary. On the contrary, they always end up as lowest precedence. In practice, you should use self references as a last resort only (for example, for calling other methods on the same instance through the bean's transactional proxy). Consider factoring out the effected methods to a separate delegate bean in such a scenario. Alternatively, you can use `@Resource`, which may obtain a proxy back to the current bean by its unique name.
+As of 4.3, `@Autowired` also considers self references for injection (that is, references back to the bean that is currently injected). Note that self injection is a fallback. Regular dependencies on other components always have precedence. In that sense, self references do not participate in regular candidate selection and are therefore in particular never primary. On the contrary, they always end up as lowest precedence. In practice, you should use self references as a last resort only (for example, for calling other methods on the same instance through the bean's transactional proxy). Consider factoring out the effected methods to a separate delegate bean in such a scenario. Alternatively, you can use `@Resource`, which may obtain a proxy back to the current bean by its unique name.
 
 >> Trying to inject the results from `@Bean` methods on the same configuration class is effectively a self-reference scenario as well. Either lazily resolve such references in the method signature where it is actually needed (as opposed to an autowired field in the configuration class) or declare the affected `@Bean` methods as `static`, decouping them from the containing configuration class instance and its lifecycle. Oherwise, such beans are only considered in the fallback phase, with matching beans on other configuration classes selected as primary candidates instead (if available).
 
-`@Autowired` applies to fields, constructors, and multi-argument methods, allowing for narrowing through qualifier annotations at hte paramater level. In constract, `@Resource` is supported only for fields and bean property setter methods with a single argument. As a consequence, you should stick with qualifiers if your injection target is a constructor or a multi-argument method.
+`@Autowired` applies to fields, constructors, and multi-argument methods, allowing for narrowing through qualifier annotations at the paramater level. In constract, `@Resource` is supported only for fields and bean property setter methods with a single argument. As a consequence, you should stick with qualifiers if your injection target is a constructor or a multi-argument method.
 
 You can create your own custom qualifier annotations. To do so, define an annotation and provide the `@Qualifier` annotation within your definition, as the following example shows:
 
@@ -3577,7 +3577,7 @@ The preceding `AppConfig` class is equivalent to the following Spring `<beans/>`
 
 >> When `@Bean` methods are declared within classes that are not annotated with `@Configuration`, they are referred to as being processed in a "lite" mode. Bean methods declared in a `@Component` or even in a plain old class are considered to be "lite", with a different primary purpose of the containing class and a `@Bean` method being a sort of bonus there. For example, service components may expose management views to the container through an additional `@Bean` method on each applicable component class. In such scenarios, `@Bean` methods are a general-purpose factory method mechanism.
 
->> Unlike full `@Configuration`, lite `@Bean` methods cannot declare inter-bean dependencies. Instead, they operate on their containing componnet's internal state and, optionally, on arguments that they may declare. Such a `@Bean` method should therefore not invoke other `@Bean` methods. Each such method is literally only a factory method for a particular bean reference, without any special suntime semantics. The positive side-effect here is that no CGLIB subclassing has to be applied at runtime, so there are no limitations in terms of class design (that is, the containing class mey be `final` and so forth).
+>> Unlike full `@Configuration`, lite `@Bean` methods cannot declare inter-bean dependencies. Instead, they operate on their containing componnet's internal state and, optionally, on arguments that they may declare. Such a `@Bean` method should therefore not invoke other `@Bean` methods. Each such method is literally only a factory method for a particular bean reference, without any special runtime semantics. The positive side-effect here is that no CGLIB subclassing has to be applied at runtime, so there are no limitations in terms of class design (that is, the containing class mey be `final` and so forth).
 
 >> In common scenarios, `@Bean` methods are to be declared within `@Configuration` classes, ensuring that "full" mode is always used and that cross-method references therefore get redirected to the container's lifecycle management. This prevents the same `@Bean` method from accidentally being invoked through a regular Java call, which helps to reduce subtle bugs that can be hard to track down when operating in "lite" mode.
 
@@ -4499,3 +4499,1028 @@ public class AppConfig {
     }
 }
 ```
+
+>> With `@Profile` on `@Bean` methods, a special scenario may apply: In the case of overloaded `@Bean` methods of the same Java method name (analogous to constructor overloading), a `@Profile` condition needs to be consistently declared to all overloaded methods. If the conditions are inconsistent, only the condition on the first declaration among the overloaded methods matters. Therefore, `@Profile` can not be used to select an overloaded method with a particular argument signature over another. Resolution between all factory methods for the same bean follows Spring's constructor resolution algorithm at creation time.
+
+>> If you want to define alternative beans with different profile conditions, use distinct Java method names that point to the same bean name by using the `@Bean` name attribute, as shown in the preceding example. If the argument signatures are all the same (for example, all of the variants have no-arg factory methods), this is the only way to represent such an arrangement in a valid Java class in the first place (since there can only be one method of a particular name and argument signature).
+#### XML Bean Definition Profiles
+
+The XML counterpart is the `profile` attribute of the `<bean/>` element. Our preceding sample configuration can be rewritten in two XML files, as follows:
+
+```xml
+<beans profile="development"
+    xmlns="http://www.springframework.org/schema/beans"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns:jdbc="http://www.springframework.org/schema/jdbc"
+    xsi:schemaLocation="...">
+
+    <jdbc:embedded-database id="dataSource">
+        <jdbc:script location="classpath:com/bank/config/sql/schema.sql"/>
+        <jdbc:script location="classpath:com/bank/config/sql/test-data.sql"/>
+    </jdbc:embedded-database>
+</beans>
+```
+
+```xml
+<beans profile="production"
+    xmlns="http://www.springframework.org/schema/beans"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns:jee="http://www.springframework.org/schema/jee"
+    xsi:schemaLocation="...">
+
+    <jee:jndi-lookup id="dataSource" jndi-name="java:comp/env/jdbc/datasource"/>
+</beans>
+```
+
+It is also possible to avoid that split and nest `<beans/>` elements within the same file, as the following example shows:
+
+```xml
+<beans xmlns="http://www.springframework.org/schema/beans"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns:jdbc="http://www.springframework.org/schema/jdbc"
+    xmlns:jee="http://www.springframework.org/schema/jee"
+    xsi:schemaLocation="...">
+
+    <!-- other bean definitions -->
+
+    <beans profile="development">
+        <jdbc:embedded-database id="dataSource">
+            <jdbc:script location="classpath:com/bank/config/sql/schema.sql"/>
+            <jdbc:script location="classpath:com/bank/config/sql/test-data.sql"/>
+        </jdbc:embedded-database>
+    </beans>
+
+    <beans profile="production">
+        <jee:jndi-lookup id="dataSource" jndi-name="java:comp/env/jdbc/datasource"/>
+    </beans>
+</beans>
+```
+
+The `spring-bean.xsd` has been constrained to allow such elements only as the last ones in the file. This should help provide flexibility without incurring clutter in the XML files.
+
+>> The XML counterpart dose not support the profile expressions described earlier. It is possible, however, to negate a profile by using the `!` operator. It is also possible to apply a logical "and" by nesting the profiles, as the following example shows:
+
+```xml
+<beans xmlns="http://www.springframework.org/schema/beans"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns:jdbc="http://www.springframework.org/schema/jdbc"
+    xmlns:jee="http://www.springframework.org/schema/jee"
+    xsi:schemaLocation="...">
+
+    <!-- other bean definitions -->
+
+    <beans profile="production">
+        <beans profile="us-east">
+            <jee:jndi-lookup id="dataSource" jndi-name="java:comp/env/jdbc/datasource"/>
+        </beans>
+    </beans>
+</beans>
+```
+
+>> In the preceding example, the `dataSource` bean is exposed if both the `production` and `us-east` profiles are active.
+#### Activating a Profile
+
+Now that we have updated our configuration, we still need to instruct Spring which profile is active. If we started our sample application right now, we would see a `NoSuchBeanDefinitionException` thrown, because the container could not find the Spring bean named `dataSource`.
+
+Activating a profile can be done in several ways, but the most straightforward is to do it programmatically against the `Environment` API which is available through an `ApplicationContext`. The following example shows how to do so:
+
+```java
+AnnotationConfigApplicationContext ctx = new AnnotationConfigApplicationContext();
+ctx.getEnvironment().setActiveProfiles("development");
+ctx.register(SomeConfig.class, StandaloneDataConfig.class, JndiDataConfig.class);
+ctx.refresh();
+```
+
+In addition, you can also declaratively activate profiles through the `spring.profiles.active` property, which may be specified through system environment variables, JVM system properties, servlet context parameters in `web.xml`, or even as an entry in JNDI. In integration tests, active profiles can be declared by using the `@ActiveProfiles` annotation in the `spring-text` module.
+
+Note that profiles are not an "either-or" proposition. You can activate multiple profiles at once. Programmatically, you can provide multiple profile names to the `setActiveProfiles()` method, which accepts `String...` varargs. The following example activates multiple profiles:
+
+```java
+ctx.getEnvironment().setActiveProfiles("profile1", "profile2");
+```
+
+Declaratively, `spring.profiles.active` may accept a comma-separated list of profile names, as the following example shows:
+
+```
+-Dspring.profiles.active="profile1,profile2"
+```
+#### Default Profile
+
+The default profile represents the profile that is enabled by default. Consider the following example:
+
+```java
+@Configuration
+@Profile("default")
+public class DefaultDataConfig {
+    @Bean
+    public DataSource dataSource() {
+        return new EmbeddedDatabaseBuilder()
+            .setType(EmbeddedDatabaseType.HSQL)
+            .addScript("classpath:com/bank/config/sql/schema.sql")
+            .build();
+    }
+}
+```
+
+If no profile is active, the `dataSource` is created. You can see this as a way to provide a default definition for one or more beans. If any profile is enabled, the default profile does not apply.
+
+You can change the name of the default profile by using `setDefaultProfiles()` on the `Environment` or, declaratively, by using the `spring.profiles.default` property.
+### 1.13.2 `PropertySource` Abstraction
+
+Spring's `Environment` abstraction provides search operations over a configurable hierarchy of property sources. Consider the following listing:
+
+```java
+ApplicationContext ctx = new GenericApplicationContext();
+Environment env = ctx.getEnvironment();
+boolean containsMyProperty = env.containsProperty("my-property");
+System.out.println("Does my environment contain the 'my-property' property? " + containsMyProperty);
+```
+
+In the preceding snippet, we see a high-level way of asking Spring whether the `my-property` property is defined for the current environment. To answer this question, the `Environment` object performs a search over a set of `PropertySource` objects. A `PropertySource` is a simple abstraction over any source of key-value pairs, and Spring's `StandardEnvironment` is configured with two PropertySource objects - one representing the set of JVM system properties (`System.getProperties()`) and one representing the set of system environment variables (`System.getenv()`).
+
+>> These default property sources are present for `StandardEnvironment`, for use in standalone applications. `StandardServletEnvironment` is populated with additional default property sources including servlet config and servlet context parameters. It can optionally enable a `JndiPropertySource`.
+
+Concretely, when you use the `StandardEnvironment`, the call to `env.containsProperty("my-property")` returns true if a `my-property` system property or `my-property` environment variable is present at runtime.
+
+>> The search performed is hierarchical. By default, system properties have precedence over environment variables. So, if the `my-property` properly happens to be set in both places during a call to `env.getProperty("my-property")`, the system property value "wins" and is returned. Note that property values are not merged but rather completely overridden by a preceding entry.
+
+>> For a common `StandardServletEnvironment`, the full hierarchy is as follows, with the highest-precedence entries at the top:
+
+>> (1) ServletConfig parameters (if applicable - for example, in case of a `DispatcherServlet` context)
+
+>> (2) ServletContext parameters (web.xml context-param entries)
+
+>> (3) JNDI environment variables (`java:comp/env/` entries)
+
+>> (4) JVM system properties (`-D` command-line arguments)
+
+>> (5) JVM system environment (operating system environment variables)
+
+Most importantly, the entire mechanism is configurable. Perhaps you have a custom souce of properties that you want to integrate into this search. To do so, implement and instantiate your own `PropertySource` and add it to the set of `PropertySource` for the current `Environment`. The following example shows how to do so:
+
+```java
+ConfigurableApplicationContext ctx = new GenericApplicationContext();
+MutablePropertySources sources = ctx.getEnvironment().getPropertySources();
+sources.addFirst(new MyPropertySource());
+```
+
+In the preceding code, `MyPropertySource` has been added with highest precedence in the search. If it contains a `my-property` property, the property is detected and returned, in favor of any `my-property` in any other `PropertySource`. The `MutablePropertySources` API exposes a number of methods that allow for precise manipulation of the set of property sources.
+### 1.13.3 Using `@PropertySource`
+
+The `@PropertySource` annotation provides a convenient and declarative mechanism for adding a `PropertySource` to Spring's `Environment`.
+
+Given a file called `app.properties` that contains the key-value pair `testbean.name=myTestBean`, the following `@Configuration` class uses `@PropertySource` in such a way that a call to `testBean.getName()` returns `myTestBean`.
+
+```java
+@Configuration
+@PropertySource("classpath:/com/myco/app.properties")
+public class AppConfig {
+    @Autowired
+    Environment env;
+
+    @Bean
+    public TestBean testBean() {
+        TestBean testBean = new TestBean();
+        testBean.setName(env.getProperty("testbean.name"));
+        return testBean;
+    }
+}
+```
+
+Any `${...}` placeholders present in a `@PropertySource` resource location are resolved against the set of property souces already registered against the environment, as the following example shows:
+
+```java
+@Configuration
+@PropertySource("classpath:/com/${my.placeholder:default/path}/app.properties")
+public class AppConfig {
+    @Autowired
+    Environment env;
+
+    @Bean
+    public TestBean testBean() {
+        TestBean testBean = new TestBean();
+        testBean.setName(env.getProperty("testbean.name"));
+        return testBean;
+    }
+}
+```
+
+Assuming that `my.placeholder` is present in one of the property sources already registered (for example, system properties or environment variables), the placeholder is resolved to the corresponding value. If not, then `default/path` is used as a default. If no default is specified and a property cannot be resolved, an `IllegalArgumentException` is thrown.
+
+>> The `@PropertySource` annotation is repeatable, according to Java 8 conventions. However, all such `@PropertySouce` annotations need to be declared at the same level, either directly on the configuration class or as meta-annotations within the same custom annotation. Mixing direct annotations and meta-annotations is not recommended, since direct annotations effectively override meta-annotations.
+### 1.13.4 Placeholder Resolution in Statements
+
+Historically, the value of placeholders in elements could be resolved only against JVM system properties or environment variables. This is no longer the case. Because the `Environment` abstraction is integrated throughout the container, it is easy to route resolution of placeholders through it. This means that you may configure the resolution process in any way you like. You can change the precedence of searching through system properties and environment variables or remove them entirely. You can also add your own property sources to the mix, as appropriate.
+
+Conretely, the following statement works regardless of where the `customer` property is defined, as long as it is available in the `Environment`:
+
+```xml
+<beans>
+    <import resource="com/bank/service/${customer}-config.xml"/>
+</beans>
+```
+## 1.14 Registering a `LoadTimeWeaver`
+
+The `LoadTimeWeaver` is used by Spring to dynamically transform classes as they are loaded into the Java virtual machine (JVM).
+
+To enable load-time weaving, you can add the `@EnableLoadTimeWeaving` to one of your `@Configuration` classes, as the following example shows:
+
+```java
+@Configuration
+@EnableLoadTimeWeaving
+public class AppConfig {
+}
+```
+
+Alternatively, for XML configuration, you can use the `context:load-time-weaver` element:
+
+```xml
+<beans>
+    <context:load-time-weaver/>
+</beans>
+```
+
+Once configured for the `ApplicationContext`, any bean within that `ApplicationContext` may implement `LoadTimeWeaverAware`, thereby receiving a reference to the load-time weaver instance. This is particularly useful in combination with Spring's JPA support where load-time weaving may be necessary for JPA class transformation.
+## 1.15 Additional Capabilities of `ApplicationContext`
+
+The `org.springframework.beans.factory` package provides basic functionality for managing and manipulating beans, including in a programmatic way. The `org.springframework.context` package adds the `ApplicationContext` interface, which extends the `BeanFactory` interface, in addition to extending other interfaces to provide additional functionality in a more application framework-oriented style. Many people use the `ApplicationContext` in a completely declarative fashion, not even creating it programmatically, but instead relying on support classes such as `ContextLoader` to automatically instantiate an `ApplicationContext` as part of the normal startup process of a Java EE web application.
+
+To enhance `BeanFactory` functionality in a more framework-oriented style, the context package also provides the following functionality:
+
+(1) Access to messages in i18n-style, through the `MessageSource` interface.
+
+(2) Access to resources, such as URLs and files, through the `ResourceLoader` interface.
+
+(3) Event publication, namely to beans that implement the `ApplicationListener` interface, through the use of the `ApplicationEventPublisher
+` interface.
+
+(4) Loading of multiple (hierarchy) contexts, letting each be focused on one particular layer, such as the web layer of an application, through the `HierarchicalBeanFactory` interface.
+### Internationalization using `MessageSource`
+
+The `ApplicationContext` interface extends an interface called `MessageSource` and, therefore, provides internationalization ("i18n") functionality. Spring also provides the `HierarchicalMessageSource` interface, which can resolve messages hierarchically. Together, these interfaces provide the foundation upon which Spring effects message resolution. The methods defined on these interfaces include:
+
+(1) `String getMessage(String code, Object[] args, String default, Locale loc)`: The basic method used to retrieve a message from the `MessageSource`. When no message is found for the specified locale, the default message is used. Any arguments passed in become replacement values, using the `MessageFormat` functionality provided by the standard library.
+
+(2) `String getMessage(String code, Object[] args, Locale loc)`: Essentially the same as the previous method but with one difference: No default message can be specified. If the message cannot be found, a `NoSuchMessageException` is thrown.
+
+(3) `String getMessage(MessageSourceResolvable resolvable, Locale locale)`: All properties used in the preceding methods are also wrapped in a class named `MessageSourceResolvable`, which you can use with this method.
+
+When an `ApplicationContext` is loaded, it automatically searches for a `MessageSource` bean defined in the context. The bean must have the name `messageSource`. If such a bean is found, all calls to the preceding methods are delegated to the message source. If no message source is found, the `ApplicationContext` attempts to find a parent containing a bean with the same name. If it does, it uses that bean as the `MessageSource`. If the `ApplicationContext` cannot find any source for messages, an empty `DelegatingMessageSource` is instantiated in order to be able to accept calls to the methods defined above.
+
+Spring provides two `MessageSource` implementations, `ResourceBundleMessageSource` and `StaticMessageSource`. Both implement `HierarchicalMessageSource` in order to do nested messaging. The `StaticMessageSource` is rarely used but provides programmatic ways to add messages to the source. The following example shows `ResourceBundleMessageSource`:
+
+```xml
+<beans>
+    <bean id="messageSource" class="org.springframework.context.support.ResourceBundleMessageSource">
+        <property name="basenames">
+            <list>
+                <value>format</value>
+                <value>exceptions</value>
+                <value>windows</value>
+            </list>
+        </property>
+    </bean>
+</beans>
+```
+
+The example assumes that you have three resource bundles called `format`, `exceptions`, and `windows` defined in your classpath. Any request to resolve a message is handled in the JDK-standard way of resolving messages through `ResourceBundle` objects. For the purposes of the example, assume the contents of two of the above resource bundle files are as follows:
+
+```
+# in format.properties
+message=Alligators rock!
+```
+
+```
+# in exceptions.properties
+argument.required=The {0} argument is required.
+```
+
+The next example shows a program to execute the `MessageSouce` functionality. Remember that all `ApplicationContext` implementations are also `MessageSource` implementations and so can be cast to the `MessageSource` interface.
+
+```java
+public static void main(String[] args) {
+    MessageSource resources = new ClassPathXmlApplicationContext("beans.xml");
+    String message = resources.getMessage("message", null, "Default", Locale.ENGLISH);
+    System.out.println(message);
+}
+```
+
+The resulting output from the above program is as follows:
+
+```
+Alligators rock!
+```
+
+To summarize, the `MessageSource` is defined in a file called `beans.xml`, which exists at the root of your classpath. The `messageSource` bean definition refers to a number of resource bundles through its `basenames` property. The three files that are passed in the list to the `basenames` property exists as files at the root of your classpath and are called `format.properties`, `exceptions.properties`, and `windows.properties`, respectively.
+
+The next example shows arguments passed to the message lookup. These arguments are converted into `String` objects and inserted into placeholders in the lookup message.
+
+```xml
+<beans>
+    <!-- this MessageSource is being used in a web application -->
+    <bean id="messageSource" class="org.springframework.context.support.ResourceBundleMessageSource">
+        <property name="basename" value="exceptions"/>
+    </bean>
+
+    <!-- lets inject the above MessageSource into this POJO -->
+    <bean id="example" class="com.something.Example">
+        <property name="messages" ref="messageSource"/>
+    </bean>
+</beans>
+```
+
+```java
+public class Example {
+    private MessageSource messages;
+
+    public void setMessages(MessageSource messages) {
+        this.messages = messages;
+    }
+
+    public void execute() {
+        String message = this.messages.getMessage("argument.required",
+            new Object [] {"userDao"}, "Required", Locale.ENGLISH);
+        System.out.println(message);
+    }
+}
+```
+
+The resulting output from the invocation of the `execute()` method is as follows:
+
+```
+The userDao argument is required.
+```
+
+With regard to internationalization ("i18n"), Spring's various `MessageSource` implementations follow the same locale resolution and fallback rules as the standard JDK `ResourceBundle`. In short, and continuing with the example `messageSource` defined previously, if you want to resolve messages against the British (`en-GB`) locale, you would create files called `format_en_GB.properties`, `exceptions_en_GB.properties`, and `windows_en_GB.properties`, respectively.
+
+Typically, locale resolution is managed by the surrounding environment of the application. In the following example, the locale against which (British) messages are resolved is specified manually:
+
+```
+# in exceptions_en_GB.properties
+argument.required=Ebagum lad, the ''{0}'' argument is required, I say, required.
+```
+
+```java
+public static void main(final String[] args) {
+    MessageSource resources = new ClassPathXmlApplicationContext("beans.xml");
+    String message = resources.getMessage("argument.required",
+        new Object [] {"userDao"}, "Required", Locale.UK);
+    System.out.println(message);
+}
+```
+
+The resulting output from the running of the above program is as follows:
+
+```
+Ebagum lad, the 'userDao' argument is required, I say, required.
+```
+
+You can also use the `MessageSourceAware` interface to acquire a reference to any `MessageSource` that has been defined. Any bean that is defined in an `ApplicationContext` that implements the `MessageSourceAware` interface is injected with the application context's `MessageSource` when the bean is created and configured.
+
+>> As an alternative to `ResourceBundleMessageSource`, Spring provides a `ReloadableResourceBundleMessageSource` class. This variant supports the same bundle file format but is more flexible than the standard JDK based `ResourceBundleMessageSource` implementation. In particular, it allows for reading files from any Spring resource location (not only from classpath) and supports hot reloading of bundle property files (while efficiently caching them in between).
+### 1.15.2 Standard and Custom Events
+
+Event handling in the `ApplicationContext` is provided through the `ApplicationEvent` class and the `ApplicationListener` interface. If a bean that implements the `ApplicationListener` interface is deployed into the context, every time an `ApplicationEvent` gets published to the `ApplicationContext`, that bean is notified. Essentially, this is the standard Observer design pattern.
+
+>> As of Spring 4.2, the event infrastructure has been significantly improved and offers an annotation-based model as well as the ability to publish any arbitrary event (that is, an object that does not necessarily extend from `ApplicationEvent`). When such an object is published, we wrap it in an event for you.
+
+The following table describes the standard events that Spring provides:
+
+| Event | Explanation |
+| :-: | :-: |
+| `ContextRefreshedEvent` | Published when the `ApplicationContext` is initialized or refreshed (for example, by using the `refresh()` method on the `ConfigurableApplicationContext` interface). Here, "initialized" means that all beans are loaded, post-processor beans are detected and activated, singletons are pre-instantiated, and the `ApplicationContext` object is ready for use. As long as the context has not been closed, a refresh can be triggered multiple times, provided that the chosen `ApplicationContext` actually supports such "hot" refreshes. For example, `XmlWebApplicationContext` supports hot refreshed, but `GenericApplicationContext` does not. |
+| `ContextStartedEvent` | Published when the `ApplicationContext` is started by using the `start()` method on the `ConfigurableApplicationContext` interface. Here, "started" means that all `Lifecycle` beans receive an explicit start signal. Typically, this signal is used to restart beans after an explicit stop, but it may also be used to start components that have not been configured for autostart (for example, components that have not already started on initialization). |
+| `ContextStoppedEvent` | Published when the `ApplicationContext` is stopped by using the `stop()` method on the `ConfigurableApplicationContext` interface. Here, "stopped" means that all `Lifecycle` beans receive an explicit stop signal. A stopped context can be restarted through a `start()` call. |
+| `ContextClosedEvent` | Published when the `ApplicationContext` is being closed by using the `close()` method on the `ConfigurableApplicationContext` interface or via a JVM shutdown hook. Here, "closed" means that all singleton beans will be destroyed. Once the context is closed, it reaches its end of life and cannot be refreshed or restarted. |
+| `RequestHandledEvent` | A web-specific event telling all beans that an HTTP request has been serviced. This event is published after the request is complete. This event is only applicable to web applications that use Spring's `DispatcherServlet`. |
+| `ServletRequestHandledEvent` | A subclass of `RequestHandledEvent` that adds Servlet-specific context information. |
+
+You can also create and publish your own custom events. The following example shows a simple class that extends Spring's `ApplicationEvent` base class:
+
+```java
+public class BlackListEvent extends ApplicationEvent {
+    private final String address;
+    private final String content;
+
+    public BlackListEvent(Object source, String address, String content) {
+        super(source);
+        this.address = address;
+        this.content = content;
+    }
+
+    // accessor and other methods...
+}
+```
+
+To publish a custom `ApplicationEvent`, call the `publishEvent()` method on an `ApplicationEventPublisher`. Typically, this is done by creating a class that implements `ApplicationEventPublisherAware` and registering it as a Spring bean. The following example shows such a class:
+
+```java
+public class EmailService implements ApplicationEventPublisherAware {
+    private List<String> blackList;
+    private ApplicationEventPublisher publisher;
+
+    public void setBlackList(List<String> blackList) {
+        this.blackList = blackList;
+    }
+
+    public void setApplicationEventPublisher(ApplicationEventPublisher publisher) {
+        this.publisher = publisher;
+    }
+
+    public void sendEmail(String address, String content) {
+        if (blackList.contains(address)) {
+            publisher.publishEvent(new BlackListEvent(this, address, content));
+            return;
+        }
+        // send email...
+    }
+}
+```
+
+At configuration time, the Spring container detects that `EmailService` implements `ApplicationEventPublisherAware` and automatically calls `setApplicationEventPublisher()`. In reality, the parameter passed in is the Spring container itself. You are interacting with the application context through its `ApplicationEventPublisher` interface.
+
+To receive the custom `ApplicationEvent`, you can create a class that implements `ApplicationListener` and register it as a Spring bean. The following example shows such a class:
+
+```java
+public class BlackListNotifier implements ApplicationListener<BlackListEvent> {
+    private String notificationAddress;
+
+    public void setNotificationAddress(String notificationAddress) {
+        this.notificationAddress = notificationAddress;
+    }
+
+    public void onApplicationEvent(BlackListEvent event) {
+        // notify appropriate parties via notificationAddress...
+    }
+}
+```
+
+Notice that `ApplicationListener` is generically parameterized when the type of your custom event (`BlackListEvent` in the preceding example). This means that the `onApplicationEvent` method can remain type-safe, avoiding any need for downcasting. You can register as many event listeners as you wish, but note that, by default, event listeners receive events synchronously. This means that the `publishEvent()` method blocks until all listeners have finished processing the event. One advantage of this synchronous and single-threaded approach is that, when a listener receives an event, it operates inside the transaction context of the publisher if a transaction context is available. If another strategy for event publication becomes necessary, see the javadoc for Spring's `ApplicationEventMulticaster` interface and `SimpleApplicationEventMulticaster` implementation for configuration options.
+
+The following example shows the bean definitions used to register and configure each of the classes above:
+
+```xml
+<bean id="emailService" class="example.EmailService">
+    <property name="blackList">
+        <list>
+            <value>known.spammer@example.org</value>
+            <value>known.hacker@example.org</value>
+            <value>john.doe@example.org</value>
+        </list>
+    </property>
+</bean>
+
+<bean id="blackListNotifier" class="example.BlackListNotifier">
+    <property name="notificationAddress" value="blacklist@example.org"/>
+</bean>
+```
+
+Putting it all together, when the `sendEmail()` method of the `emailService` bean is called, if there are any email messages that should be blacklisted, a custom event of type `BlackListEvent` is published. The `blackListNotifier` bean is registered as an `ApplicationListener` an receives the `BlackListEvent`, at which point it can notify appropriate parties.
+
+>> Spring's eventing mechanism is designed for simple communication between Spring beans within the same application context. However, for more sophisticated enterprise integration needs ,the separately maintainer Spring Integration project provides complete support for building lightweight, pattern-oriented, event-driven architectures that build upon the well-known Spring programming model.
+#### Annotation-based Event Listeners
+
+As of Spring 4.2, you can register an event listener on any public method of a managed bean by using the `@EventListener` annotation. The `BlackListNotifier` can be rewritten as follows:
+
+```java
+public class BlackListNotifier {
+    private String notificationAddress;
+
+    public void setNotificationAddress(String notificationAddress) {
+        this.notificationAddress = notificationAddress;
+    }
+
+    @EventListener
+    public void processBlackListEvent(BlackListEvent event) {
+        // notify appropriate parties via notificationAddress...
+    }
+}
+```
+
+The method signature once again declares the event type to which it listens, but, this time, with a flexible name and without implementing a specific listener interface. The event type can also be narrowed through generics as long as the actual event type resolves your generic parameter in its implementation hierarchy.
+
+If your method should listen to several events or if you want to define it with no parameter at all, the event types can also be specified on the annotation itself. The following example shows how to do so:
+
+```java
+@EventListener({ContextStartedEvent.class, ContextRefreshedEvent.class})
+public void handleContextStart() {
+    // ...
+}
+```
+
+It is also possible to add additional runtime filtering by using the `condition` attribute of the annotation that defines a `SpEL` expression, which should match to actually invoke the method for a particular event.
+
+The following example shows how our notifier can be written to be invoked only if the `content` attribute of the event is equal to `my-event`:
+
+```java
+@EventListener(condition = "#blEvent.content == 'my-event'")
+public void processBlackListEvent(BlackListEvent blEvent) {
+    // notify appropriate parties via notificationAddress...
+}
+```
+
+Each `SpEL` expression evaluates against a dedicated context. The following table lists the items made available to the context so that you can use them for conditional event processing:
+
+| Name | Location | Description | Example |
+| :-: | :-: | :-: | :-: |
+| Event | root object | The actual `ApplicationEvent`. | `#root.event` or `event` |
+| Arguments array | root object | The arguments (as an object array) used to invoke the method. | `#root.args` or `args`; `args[0]` to access the first argument, etc. |
+| Argument name | evaluation context | The name of any of the method arguments. If, for some reason, the names are not available (for example, because there is no debug information in the compiled byte code), individual arguments are also available using the `#a<#arg>` syntax where `<#arg>` stands for the argument index (starting from 0). | `#blEvent` or `#a0` (you can also use `#p0` or `#p<#arg>` parameter notation as an alias)
+
+Note that `#root.event` gives you access to the underlying event, even if your method signature actually refers to an arbitrary object that was published.
+
+If you need to publish an event as the result of processing another event, you can change the method signature to return the event that shoud be published, as the following example shows:
+
+```java
+@EventListener
+public ListUpdateEvent handleBlackListEvent(BlackListEvent event) {
+    // notify appropriate parties via notificationAddress and
+    // then publish a ListUpdateEvent...
+}
+```
+
+>> This feature is not suppored for asynchronous listeners.
+
+This new method publishes a new `ListUpdateEvent` for every `BlackListEvent` handled by the method above. If you need to publish several events, you can return a `Collection` of events instead.
+#### Asynchronous Listeners
+
+If you want a particular listener to process events asynchronously, you can reuse the regular `@Async` support. The following example shows how to do so:
+
+```java
+@EventListener
+@Async
+public void processBlackListEvent(BlackListEvent event) {
+    // BlackListEvent is processed in a separate thread
+}
+```
+
+Be aware of the following limitations when using asynchronous events:
+
+(1) If an asynchronous event listener throws an `Exception`, it is not propagated to the caller. See `AsyncUncaughtExceptionHandler` for more details.
+
+(2) Asynchronous event listener methods cannot publish a subsequent event by returning a value. If you need to publish another event as the result of the processing, inject an `ApplicationEventPublisher` to publish the event manually.
+#### Ordering Listeners
+
+If you need one listener to be invoked before another one, you can add the `@Order` annotation to the method declaration, as the following example shows:
+
+```java
+@EventListener
+@Order(42)
+public void processBlackListEvent(BlackListEvent event) {
+    // notify appropriate parties via notificationAddress...
+}
+```
+#### Generic Events
+
+You can also use generics to further define the structure of your event. Consider using an `EntityCreatedEvent<T>` where `T` is the type of the actual entity that got created. For example, you can create the following listener definition to receive only `EntityCreatedEvent` for a `Person`:
+
+```java
+@EventListener
+public void onPersonCreated(EntityCreatedEvent<Person> event) {
+    // ...
+}
+```
+
+Due to type erasure, this works only if the event that is fired resolves the generic parameters on which the event listener filters (that is, something like `class PersonCreatedEvent extends EntityCreatedEvent<Person> {...}`).
+
+In certain circumstances, this may become quite tedious if all events follow the same structure (as should be the case for the event in the preceding example). In such a case, you can implement `ResolvableTypeProvider` to guide the framework beyond what the runtime environment provides. The following event shows how to do so:
+
+```java
+public class EntityCreatedEvent<T> extends ApplicationEvent implements ResolvableTypeProvider {
+    public EntityCreatedEvent(T entity) {
+        super(entity);
+    }
+
+    @Override
+    public ResolvableType getResolvableType() {
+        return ResolvableType.forClassWithGenerics(getClass(), ResolvableType.forInstance(getSource()));
+    }
+}
+```
+
+This works not only for `ApplicationEvent` but any arbitrary object that you send as an event.
+### 1.15.3 Convenient Access to Low-level Resources
+
+For optimal usage and understanding of application contexts, you should familiarize yourself with Spring's `Resource` abstraction, as described in Resources.
+
+An application context is a `ResourceLoader`, which can be used to load `Resource` objects. A `Resource` is essentially a more feature rich version of the JDK `java.net.URL` class. In fact, the implementations of the `Resource` wrap an instance of `java.net.RUL`, where appropriate. A `Resource` can obtain low-level resources from almost any location in a transparent fashion, including from the classpath, a filesystem location, anywhere describable with a standard URL, and some other variations. If the resource location string is a simple path without any special prefixes, where those resources come from is specific and appropriate to the actual application context type.
+
+You can configure a bean deployed into the application context to implement the special callback interface, `ResourceLoaderAware`, to be automatically called back at initialization time with the application context itself passed in as the `ResourceLoader`. You can also expose properties of type `Resource`, to be used to access static resources. They are injected into it like any other properties. You can specify those `Resource` properties as simple `String` paths and rely one automatic conversion from those text strings to actual `Resource` objects when the bean is deployed.
+
+The location path or paths supplied to an `ApplicationContext` constructor are actually resource strings and, in simple form, are treated appropriately according to the specific context implementation. For example `ClassPathXmlApplicationContext` treats a simple location path as a classpath location. You can also use location paths (resource strings) with special prefixes to force leading of definitions from the classpath or a URL, regardless of the actual context type.
+### 1.15.4 Convenient ApplicationContext Instantiation for Web Applications
+
+You can create `ApplicationContext` instances declaratively by using, for example, a `ContextLoader`. Of course, you can also create `ApplicationContext` instances programmatically by using one of the `ApplicationContext` implementations.
+
+You can register an `ApplicationContext` by using the `ContextLoaderListener`, as the following example shows:
+
+```xml
+<context-param>
+    <param-name>contextConfigLocation</param-name>
+    <param-value>/WEB-INF/daoContext.xml /WEB-INF/applicationContext.xml</param-value>
+</context-param>
+
+<listener>
+    <listener-class>org.springframework.web.context.ContextLoaderListener</listener-class>
+</listener>
+```
+
+The listener inspects the `contextConfigLocation` parameter. If the parameter does not exist, the listener uses `/WEB-INF/applicationContext.xml` as a default. When the parameter does exist, the listener separates the `String` by using predefined delimiters (comma, semicolon, and whitespace) and uses the values as locations where application contexts are searched. Ant-style path patterns are supported as well. Examples are `/WEB-INF/*Context.xml` (for all files with names that end with `Context.xml` and that reside in the `WEB-INF` directory) and `/WEB-INF/**/*Context.xml` (for all such files in any subdirectory of `WEB-INF`).
+### 1.15.5 Deploying a Spring ApplicationContext as a Java EE RAR File
+
+It is possible to deploy a Spring `ApplicationContext` as a RAR file, encapsulating the context and all of its required bean classes and library JARs in a Java EE RAR deployment unit. This is the equivalent of bootstrapping a stand-alone `ApplicationContext` (only hosted in Java EE environment) being able to access the Java EE servers facilities. RAR deployment is a more natural alternative to a scenario of deploying a headless WAR file - in effect, a WAR file without any HTTP entry points that is used only for bootstrapping a Spring `ApplicationContext` in a Java EE environment.
+
+RAR deployment is ideal for application contexts that do not need HTTP entry points but rather consist only of message endpoints and scheduled jobs. Beans in such a context can use application server resources such as the JTA transcation manager and JNDI-bound JDBC `DataSource` instances and JMS `ConnectionFactory` instances and can also register with the platform's JMX server - all through Spring's standard transaction management and JNDI and JMX support facilities. Application components can also interact with the application server's JCA `WorkdManager` through Spring's `TaskExecutor` abstraction.
+
+See the javadoc of the `SpringContextResourceAdapter` class for the configuration details involved in RAR deployment.
+
+For a simple deployment of a Spring ApplicationContext as a Java EE RAR file:
+
+(1) Package all application classes into a RAR file (which is a standard JAR file with a different file extension). Add all required library JARs into the root of the RAR archive. Add a `META-INF/ra.xml` deployment descriptor (as shown in the javadoc for `SpringContextResourceAdapter`) and the corresponding Spring XML bean definition file(s) (typically `META-INF/applicationContext.xml`).
+
+(2) Drop the resulting RAR file into your application server's deployment directory.
+
+>> Such RAR deployment units are usually self-contained. They do not expose components to the outside world, not even to other modules of the same application. Interaction with a RAR-based `ApplicationContext` usually occurs through JMS destinations that it shares with other modules. A RAR-based `ApplicationContext` may also, for example, schedule some jobs or react to new files in the file system (or the like). If it needs to allow synchronous access from the outside, it could (for example) export RMI endpoints, which may be used by other application modules on the same machine.
+## 1.16 The `BeanFactory`
+
+The `BeanFactory` API provides the underlying basis for Spring's IoC functionality. Its specific contracts are mostly used in integration with other parts of Spring and related third-party frameworks, and its `DefaultListableBeanFactory` implementation is a key delegate within the higher-level `GenericApplicationContext` container.
+
+`BeanFactory` and related interfaces (such as `BeanFactoryAware`, `InitializingBean`, `DisposableBean`) are important integration points for other framework components. By not requiring any annotations or even reflection, they allow for very efficient interaction between the container and its components. Application-level beans may use the same callback interfaces but typically prefer declarative dependency injection instead, either through annotations or through programmatic configuration.
+
+Note that the core `BeanFactory` API level and its `DefaultListableBeanFactory` implementation do not make assumptions about the configuration format or any component annotations to be used. All of these flavors come in through extensions (such as `XmlBeanDefinitionReader` and `AutowiredAnnotationBeanPostProcessor`) and operate on shared `BeanDefinition` objects as a core metadata representation. This is the essence of what makes Spring's container so flexible and extensible.
+### 1.16.1 `BeanFactory` or `ApplicationContext`
+
+This section explains the difference between the `BeanFacory` and `ApplicationContext` container levels and the implications on bootstrapping.
+
+You should use an `ApplicationContext` unless you have a good reason for not doing so, with `GenericApplicationContext` and its subclass `AnnotationConfigApplicationContext` as the common implementations for custom bootstrapping. These are the primary entry points to Spring's core container for all common purposes: loading of configuration files, triggering a classpath scan, programmatically registering bean definitions and annotated classes, and (as of 5.0) registering functional bean definitions.
+
+Because an `ApplicationContext` includes all the functionality of a `BeanFactory`, it is generally recommended over a plain `BeanFactory`, except for scenarios where full contro over bean processing is needed. Within an `ApplicationContext` (such as the `GenericApplicationContext` implementation), several kinds of beans are detected by convention (that is, by bean name or by bean type - in particular, post-processors), while a plain `DefaultListableBeanFactory` is agnostic about any special beans.
+
+For many extended container features, such as annotation processing and AOP proxying, the `BeanPostProcessor` extension point is essential. If you use only a plain `DefaultListableBeanFactory`, such post-processors do not get detected and activated by default. This situation could be confusing, because nothing is actually wrong with your bean configuration. Rather, in such a scenario, the container needs to be fully bootstrapped through additional setup.
+
+The following table lists features provided by the `BeanFactory` and `ApplicationContext` interfaces and implementations.
+
+| Feature | `BeanFacory` | `ApplicationContext` |
+| :-: | :-: | :-: |
+| Bean instantiation/wiring | Yes | Yes |
+| Integrated lifecycle management | No | Yes |
+| Automatic `BeanPostProcessor` registration | No | Yes |
+| Automatic `BeanFactoryPostProcessor` registration | No | Yes |
+| Convenient `MessageSource` access (for internalization) | No | Yes |
+| Built-in `ApplicationEvent` publication mechanism | No | Yes |
+
+To explicitly register a bean post-processor with a `DefaultListableBeanFactory`, you need to programmatically call `addBeanPostProcessor`, as the following example shows:
+
+```java
+DefaultListableBeanFactory factory = new DefaultListableBeanFactory();
+// populate the factory with bean definitions
+
+// now register any needed BeanPostProcessor instances
+factory.addBeanPostProcessor(new AutowiredAnnotationBeanPostProcessor());
+factory.addBeanPostProcessor(new MyBeanPostProcessor());
+
+// now start using the factory
+```
+
+To apply a `BeanFactoryPostProcessor` to a plain `DefaultListableBeanFactory`, you need to call its `postProcessBeanFactory` methos, as the following example shows:
+
+```java
+DefaultListableBeanFactory factory = new DefaultListableBeanFactory();
+XmlBeanDefinitionReader reader = new XmlBeanDefinitionReader(factory);
+reader.loadBeanDefinitions(new FileSystemResource("beans.xml"));
+
+// bring in some property values from a Properties file
+PropertySourcesPlaceholderConfigurer cfg = new PropertySourcesPlaceholderConfigurer();
+cfg.setLocation(new FileSystemResource("jdbc.properties"));
+
+// now actually do the replacement
+cfg.postProcessBeanFactory(factory);
+```
+
+In both cases, the explicit registration steps are inconvenient, which is why the various `ApplicationContext` variants are preferred over a plain `DefaultListableBeanFactory` in Spring-backed applications, especially when relying on `BeanFactoryPostProcessor` and `BeanPostProcessor` instances for extended container functionality in typical enterprise setup.
+
+>> An `AnnotationConfigApplicationContext` has all common annotation post-processors registered and may bring in additional processors underneath the covers through configuration annotations, such as `@EnableTranscationManagement`. At the abstraction level of Spring's annotation-based configuration model, the notion of bean post-processors becomes a mere internal container detail.
+# 2 Resources
+## 2.1 Introduction
+
+Java's standard `java.net.URL` class and standard handlers for various URL prefixes, unfortunately, are not quite adequate enough for all access to low-level resources. For example, there is no standardized `URL` implementation that may be used to access a resource that needs to be obtained from the classpath or relative to a `ServletContext`. While it is possible to register new handlers for specialized `URL` prefixes (similar to existing handlers for prefixes such as `http:`), this is generally quite complicated, and the `URL` interface still lacks some desirable functionality, such as a method to check for the existence of the resource being pointed to.
+## 2.2 The Resource Interface
+
+Spring's `Resource` interface is meant to be a more capable interface for abstracting access to low-level resources. The following listing shows the `Resource` interface definition:
+
+```java
+public interface Resource extends InputStreamSource {
+    boolean exists();
+
+    boolean isOpen();
+
+    URL getURL() throws IOException;
+
+    File getFile() throws IOException;
+
+    Resource createRelative(String relativePath) throws IOException;
+
+    String getFilename();
+
+    String getDescription();
+}
+```
+
+As the definition of the `Resource` interface shows, it extends the `InputStreamSource` interface. The following listing shows the definition of the `InputStreamSource` interface:
+
+```java
+public interface InputStreamSource {
+    InputStream getInputStream() throws IOException;
+}
+```
+
+Some of the most important methods from the `Resource` interface are:
+
+(1) `getInputStream()`: Locates and open the resource, returning an `InputStream` for reading from the resource. It is expected that each invocation returns a fresh `InputStream`. It is the responsiblity of the caller to close the stream.
+
+(2) `exists()`: Returns a `boolean` indicating whether this resource actually exists in physical form.
+
+(3) `isOpen()`: Returns a `boolean` indicating whether this resource represents a handle with an open stream. If `true`, the `InputStream` cannot be read multiple times and must be read once only and then closed to avoid resource leaks. Returns `false` for all usual resource implementations, with the exception of `InputStreamResource`.
+
+(3) `getDescription()`: Returns a description for this Resource, to be used for error output when working with the resource. This is often the fully qualified file name or the actual URL of the resource.
+
+Other methods let you obtain an actual `URL` or `File` object representing the resource (if the underlying implementation is compatible and supports that functionality).
+
+Spring itself uses the `Resource` abstraction extensively, as an argument type in many method signatures when a resource is needed. Other methods in some Spring APIs (such as the constructors to various `ApplicationContext` implementations) take a `String` which in unadorned or simple form is used to create a `Resource` appropriate to that context implementation or, via special prefixes on the `String` path, let the caller specify that a specific `Resource` implementation must be created and used.
+
+While the `Resource` interface is used a lot with Spring and by Spring, it is actually very useful to use as a general utility class by itself in your own code, for access to resources, even when your code does not know or care about any other parts of Spring. While this couples your code to Spring, it really only couples it to this small set of utility classes, which serve as a more capable replacement for `URL` and can be considered equivalent to any other library you would use for this purpose.
+
+>> The `Resource` abstraction does not replace functionality. It wraps it where possible. For example, a `UrlResource` wraps a URL and uses the wrapped `URL` to do its work.
+## 2.3 Built-in Resource Implementations
+### 2.3.1 `UrlResource`
+
+`UrlResource` wraps a `java.net.URL` and can be used to access any object that is normally accessible with a URL, such as files, an HTTP target, an FTP target, and others. All URLs have a standardized `String` representation, such that appropriate standardized prefixes are used to indicate one URL type from another. This includes `file:`: for accessing filesystem paths, `http::` for accessing resources through the HTTP protocol, `ftp:` for accessing resources through FTP, and others.
+
+A `UrlResource` is created by Java code by explicitly using the `UrlResource` constructor but is often created implicitly when you call an API method that takes a `String` argument meant to represent a path. For the latter case, a JavaBeans `PropertyEditor` ultimately decides which type of `Resource` to create. If the path string contains well-known (to it, that is) prefix (such as `classpath:`), it creates an appropriate specialized `Resource` for that prefix. However, if it does not recognize the prefix, it assume the string is a standard URL string and creates a `UrlResource`.
+### 2.3.2 `ClassPathResource`
+
+This class represents a resource that should be obtained from the classpath. It uses either the thread context class loader, a given class loader, or a given class for loading resources.
+
+This `Resource` implementation supports resolution as `java.io.File` if the class path resource in the file system but not for classpath resources that reside in a jar and have not been expanded (by the servlet engine or whatever the environment is) to be filesystem. To address this, the various `Resource` implementations always support resolution as a `java.net.URL`.
+
+A `ClassPathResource` is created by Java code by explicitly using the `ClassPathResource` constructor but is often created implicitly when you call an API method that takes a `String` argument meant to represent a path. For the latter case, a JavaBeans `PropertyEditor` recognizes the special prefix, `classpath:`, on the string path and create a `ClassPathResource` in that case.
+### 2.3.3 `FileSystemResource`
+
+This is a `Resource` implementation for `java.io.File` and `java.nio.file.Path` handles. It supports resolution as a `File` and as a `URL`.
+### 2.3.4 `ServletContextResource`
+
+This is a `Resource` implementation for `ServletConext` resources that interprets relative paths within the relevant web application's root directory.
+
+It always supports stream access and URL access but allows `java.io.File` access only when the web application archive is expanded and the resource is physically on the filesystem. Whether or not it is expanded and on the filesystem or accessed directly from the JAR or somewhere else like a database (which is conceivable) is actually dependent on the Servlet container.
+### 2.3.5 `InputStreamResource`
+
+An `InputStreamSource` is a `Resource` implementation for a given `InputStream`. It should be used only if no specified `Resource` implementation is applicable. In particular, prefer `ByteArrayResource` or any of the file-based `Resource` implementations where possible.
+
+In contrast to other `Resource` implementations, this is a descriptor for an already-opened resource. Therefore, it returns `true` from `isOpen()`. Do not use it if you need to keep the resource descriptor somewhere or if you need to read a stream multiple times.
+### 2.3.6 `ByteArrayResource`
+
+This is a `Resource` implementation for a given byte array. It creates a `ByteArrayInputStream` for the given byte array.
+
+It is useful for loading content from any given byte array without having to resort to a single-use `InputStreamResource`.
+## 2.4 The `ResourceLoader`
+
+The `ResourceLoader` interface is meant to be implemented by objects that can return (that is, load) `Resource` instances. The following listing shows the `ResourceLoader` interface definition:
+
+```java
+public interface ResourceLoader {
+    Resource getResource(String location);
+}
+```
+
+All application contexts implement the `ResourceLoader` interface. Therefore, all application contexts may be used to obtain `Resource` instances.
+
+When you call `getResource()` on a specific application context, and the location path specified doesn't have a specific prefix, you get back a `Resource` type that is appropriate to that particular application context. For example, assume the following snippet of code was executed against a `ClassPathXmlApplicationContext` instance:
+
+```java
+Resource template = ctx.getResource("some/resource/path/myTemplate.txt");
+```
+
+Against a `ClassPathXmlApplicationContext`, that code returns a `ClassPathResource`. If the same method were executed against a `FileSystemXmlApplicationContext` instance, it would return a `FileSystemResource`. For a `WebApplicationContext`, it would return a `ServletContextResource`. It would similarly return appropriate objects for each context.
+
+As a result, you can load resources in a fashion appropriate to the particular application context.
+
+On the other hand, you may also force `ClassPathResource` to be used, regardless of the application context type, by specifying the special `classpath:` prefix, as the following example shows:
+
+```java
+Resource template = ctx.getResource("classpath:some/resource/path/myTemplate.txt");
+```
+
+Similarly, you can force a `UrlResource` to be used by specifying any of the standard `java.net.URL` prefixes. The following pair of examples use the `file` and `http` prefixes:
+
+```java
+Resource template = ctx.getResource("file:///some/resource/path/myTemplate.txt");
+```
+
+```java
+Resource template = ctx.getResource("https://myhost.com/resource/path/myTemplate.txt");
+```
+
+The following table summarizes the strategy for converting `String` objects to `Resource` objects:
+
+| Prefix | Example | Explanation |
+| :-: | :-: | :-: |
+| classpath: | `classpath:com/myapp/config.xml` | Loaded from the classpath. |
+| file: | `file:///data/config.xml` | Loaded as a `URL` from the filesystem. |
+| http: | `https://myserver/logo.png` | Loaded as a `URL` |
+| (none) | `/data/config.xml` | Depends on the underlying `ApplicationContext`. |
+## 2.5 The `ResourceLoaderAware` interface
+
+The `ResourceLoaderAware` interface is a special callback interface which identifies components that expected to be provided with a `ResourceLoader` reference. The following listing shows the definition of the `ResourceLoaderAware` interface:
+
+```java
+public interface ResourceLoaderAware {
+    void setResourceLoader(ResourceLoader resourceLoader);
+}
+```
+
+When a class implements `ResourceLoaderAware` and is deployed into an application context (as a Spring-managed bean), it is recognized as `ResourceLoaderAware` by the application context. The application context then invokes `setResourceLoader(ResourceLoader)`, supplying itself as the argument (remember, all application contexts in Spring implement the `ResourceLoader` interface).
+
+Since an `ApplicationContext` is a `ResourceLoader`, the bean could also implement the `ApplicationContextAware` interface and use the supplied application context directly to load resources. However, in general, it is better to use the specialized `ResourceLoader` interface if that is all you need. The code would be coupled only to the resource loading interface (which can be considered a utility interface) and not to the whole Spring `ApplicationContext` interface.
+
+In application componnets, you may also rely upon autowiring of the `ResourceLoader` as an alternative to implementing the `ResourceLoaderAware` interface. The "traditional" `constructor` and `byType` autowiring modes are capable of providing a `ResourceLoader` for either a constructor argument or a setter method parameter, respectively. For more flexibility (including the ability to autowire fields and multiple parameter methods), consider using the annotation-based autowiring features. In that case, the `ResourceLoader` is autowired into a field, constructor argument, or method parameter that expects the `ResourceLoader` type as long as the field, constructor, or method in question carries the `@Autowired` annotation.
+## 2.6 Resources as Dependencies
+
+If the bean itself is going to determine and supply the resource path through some sort of dynamic process, it probably makes sense for the bean to use the `ResourceLoader` interface to load resources. For example, consider the loading of a template of some sort, where the specific resource that is needed depends on the role of the user. If the resources are static, it makes sense to eliminate the use of the `ResourceLoader` interface completely, have the bean expose the `Resource` properties it needs, and expect them to be injected into it.
+
+What makes it trivial to then inject these properties is that all application contexts registered and use a special JavaBeans `PropertyEditor`, which can convert `String` paths to `Resource` objects. So, if `myBean` has a template property of type `Resource`, it can be configured with a simple string for that resource, as the following example shows:
+
+```xml
+<bean id="myBean" class="...">
+    <property name="template" value="some/resource/path/myTemplate.txt"/>
+</bean>
+```
+
+Note that the resource path has no prefix. Consequently, because the application context itself is going to be used as the `ResourceLoader`, the resource itself is loaded through a `ClassPathResource`, a `FileSystemResource`, or a `ServletContextResource`, depending on the exact type of the context.
+
+If you need to force a specific `Resource` type to be used, you can use a prefix. The following two examples show how to force a `ClassPathResource` and a `UrlResource` (the latter being used to access a filesystem file):
+
+```xml
+<property name="template" value="classpath:some/resource/path/myTemplate.txt">
+```
+
+```xml
+<property name="template" value="file:///some/resource/path/myTemplate.txt"/>
+```
+## 2.7 Application Contexts and Resource Paths
+
+This section covers how to create application contexts with resources, including shortcuts that work with XML, how to use wildcards, and other details:
+### 2.7.1 Constructing Application Contexts
+
+An application context constructor (for a specified application context type) generally takes a string or array of strings as the location paths of the resources, such as XML files that make up the definition of the context.
+
+When such a location path does not have a prefix, the specific `Resource` type built from that path and used to load the bean definitions depends on and is appropriate to the specifc application context. For example, consider the following example, which creates a `ClassPathXmlApplicationContext`:
+
+```java
+ApplicationContext ctx = new ClassPathXmlApplicationContext("conf/appContext.xml");
+```
+
+The bean definitions are loaded from the classpath, because a `ClassPathResource` is used. However, consider the following example, which creates a `FileSystemXmlApplicationContext`:
+
+```java
+ApplicationContext ctx = new FileSystemXmlApplicationContext("conf/appContext.xml");
+```
+
+Now the bean definition is loaded from a filesystem location (in this case, relative to the current working directory).
+
+Note that the use of the special classpath prefix or a standard URL prefix on the location path overrides the default type of `Resource` created to load the definition. Consider the following example:
+
+```java
+ApplicationContext ctx = new FileSystemXmlApplicationContext("classpath:conf/appContext.xml");
+```
+
+Using `FileSystemXmlApplicationContext` loads the bean definitions from the classpath. However, it is still a `FileSystemXmlApplicationContext`. If it is subsequently used as a `ResourceLoader`, any unprefixed paths are still treated as filesystem paths.
+#### Constructing `ClassPathXmlApplicationContext` Instances - Shortcuts
+
+The `ClassPathXmlApplicationContext` exposes a number of constructors to enable convenient instantiation. The basic idea is that you can supply merely a string array that contains only the filenames of the XML files themselves (without the leading path information) and also supplies a `Class`. The `ClassPathXmlApplicationContext` then derives the path information from the supplied class.
+
+Consider the following directory layout:
+
+```
+com/
+  foo/
+    services.xml
+    daos.xml
+    MessengerService.class
+```
+
+The following example shows how a `ClassPathXmlApplicationContext` instance composed of the beans defined in files named `servicex.xml` and `daos.xml` (which are on the classpath) can be instantiated:
+
+```java
+ApplicationContext ctx = new ClassPathXmlApplicationContext(new String[] {"services.xml", "daos.xml"}, MessengerService.class);
+```
+### 2.7.2 Wildcards in Application Context Constructor Resource Paths
+
+The resource paths in application context constructor values may be simple paths (as shown earlier), each of which has a one-to-one mapping to a target `Resource` or, alternately, may contain the special "classpath\*:" prefix or internal Ant-style regular expressions (matched by using Spring's `PathMatcher` utility). Both of the latter are effectively wildcards.
+
+One use for this mechanism is when you need to do component-style application assembly. All components can 'publish' context definition fragments to a well-known location path, and, when the final application context is created using the same path prefixed with `classpath*:`, all component fragments are automatically picked up.
+
+Note that this wildcasting is specific to the use of resource paths in application context constructors (or when you use the `PathMatcher` utility classes hierarchy directly) and is resolved at construction time. It has nothing to do with the `Resource` type itself. You cannot use the `classpath*:` prefix to construct an actual `Resource`, as a resource points to just one resource at a time.
+#### Ant-style Patterns
+
+Path locations can contain Ant-style patterns, as the following example shows:
+
+```
+/WEB-INF/*-context.xml
+com/mycompany/**/applicationContext.xml
+file:C:/some/path/*-context.xml
+classpath:com/mycompany/**/applicationContext.xml
+```
+
+When the path location contains an Ant-style pattern, the resolver follows a more complex procedure to try to resolve the wildcard. It produces a `Resource` for the path up to the last non-wildcard segment and obtains a URL from it. If this URL is not a `jar`: URL or container-specific variant (such as `zip`: in WebLogic), `wsjar` in WebSphere, and so on), a `java.io.File` is obtained from it and used to resolve the wildcard by traversing the filesystem. In the case of a jar URL, the resolver either gets a `java.next.JarURLConnection` from it or manually parses the jar URL and then traverses the contents of the jar file to resolve the wildcards.
+##### Implications on Portability
+
+If the specified path is already a file URL (either implicitly because the base `ResourceLoader` is a filesystem one or explicitly), wildcarding is guaranteed to work in a completely protable fashion.
+
+If the specified path is a classpath location, the resolver must obtain the last non-wildcard path segment URL by making a `Classloader.getResource()` call. Since this is just a node of the path (not the file at the end), it is actually undefined exactly what sort of a URL is returned in this case. In practice, it is always a `java.io.File` representing the directory (where the classpath resource resolves to a filesystem location) or a jar URL of some sort (where the classpath resource resolves a jar location). Still, there is a protability concern on this operation.
+
+If a jar URL is obtained for the last non-wildcard segment, the resolver must be able to get a `java.net.JarURLConnection` from it or manually parse the jar URL, to be able to walk the contents of the jar and resolve the wildcard. This does work in most environments but fails in others, and we strongly recommend that the wildcard resolution of resources coming from jars be thoroughly tested in your specific environment before you rely on it.
+#### The `classpath*:` Prefix
+
+When constructing an XML-based application context, a location string may use the special `classpath*:` prefix, as the following example shows:
+
+```java
+ApplicationContext ctx = new ClassPathXmlApplicationContext("classpath*:conf/appContext.xml");
+```
+
+This special prefix specifies that all classpath resources that match the given name must be obtained (internally, this essentially happens through a call to `ClassLoader.getResources(...)`) and then merged to form the final application context definition.
+
+>> The wildcard classpath relies on the `getResources()` method of the underlying classloader. As most application servers nowadays supply their own classloader implementation, the behavior might differ, especially when dealing with jar files. A simple test to check if `classpath*` works is to use the classloader to load a file from within a jar on the classpath: `getClass().getClassLoader().getResources("<someFileInsideTheJar>")`. Try this test with files that have the same name but are placed inside two different locations. In case an inappropriate result is returned, check the application server documentation for settings that might affect the classloader behavior.
+
+You can also combine the `classpath*:` prefix with a `PathMatcher` pattern in the rest of the location path (for example, `classpath*:META-INF/*-beans.xml`). In this case, the resolution strategy is fairly simple: A `ClassLoader.getResources()` call is used on the last non-wildcard path segment to get all the matching resources in the class loader hierarchy and then, off each resource, the same `PathMatcher` resolution strategy described earlier is used for the wildcard subpath.
+#### Other Notes Relating to Wildcards
+
+Note that `classpath*:`, when combined with Ant-style patterns, only works reliably with at last one root directory before the pattern starts, unless the actual target files reside in the file system. This means that a pattern such as `classpath*:*.xml` might not retrieve files from the root of jar files but rather only from the root of expanded directories.
+
+Spring's ability to retrieve classpath entries originates from the JDK's `ClassLoader.getResources()` method, which only returns file system locations for an empty string (indicating potential roots to search). Spring evaluates `URLClassLoader` runtime configuration and the `java.class.path` manifest in jar files as well, but this is not guaranteed to lead to portable behavior.
+
+>> The scanning of classpath packages requires the presence of corresponding directory entries in the classpath. When you build JARs with Ant, do not activate the files-only switch of the JAR task. Also, classpath directories may not get exposed based on security policies in some environments - for example, stand-alone applications on JDK 1.7.0_45 and higher (which requires 'Trusted-Library' to be set up in your manifests.)
+
+>> On JDK 9's module path (Jigsaw), Spring's classpath scanning generally works as expected. Putting resources into a dedicated directory is highly recommendable here as well, avoiding the aforementioned portability problems with searching the jar file root level.
+
+Ant-style patterns with `classpath:` resources are not guaranteed to find matching resources if the root package to search is available in multiple class path locations. Consider the following example of a resource location:
+
+```
+com/mycompany/package1/service-context.xml
+```
+
+Now consider an Ant-style path that someone might use to try to find that file:
+
+```
+classpath:com/mycompany/**/service-context.xml
+```
+
+Such a resource may be in only one location, but when a path such as the preceding example is used to try to resolve it, the resolver works off the (first) URL returned by `getResource("com/mycompany");`. If this base package node exists in multiple classloader locations, the actual end resource may not be there. Therefore, in such a case you should prefer using `classpath*:` with the same Ant-style pattern, which searches all class path locations that contain the root package.
+### 2.7.3 `FileSystemResource` Caveats
+
+A `FileSystemResource` that is not attatched to a `FileSystemApplicationContext` (that is, when a `FileSystemApplicationContext` is not the actual `ResourceLoader`) treats absolute and relative paths as you would expect. Relative paths are relative to the current working directory, while absolute paths are relative to the root of the filesystem.
+
+For backwards compatibility (historical) reasons however, this changes when the `FileSystemApplicationContext` is the `ResourceLoader`. The `FileSystemApplicationContext` forces all attatched `FileSystemResource` instances to treate all location paths as relative, whether they start with a leading slash or not. In practice, this means the following examples are equivalent:
+
+```java
+ApplicationContext ctx = new FileSystemXmlApplicationContext("conf/context.xml");
+```
+
+```java
+ApplicationContext ctx = new FileSystemXmlApplicationContext("/conf/context.xml");
+```
+
+The following examples are also equivalent (even though it would make sense for them to be different, as one case relative and the other is absolute):
+
+```java
+FileSystemXmlApplicationContext ctx = ...;
+ctx.getResource("some/resource/path/myTemplate.txt");
+```
+
+```java
+FileSystemXmlApplicationContext ctx = ...;
+ctx.getResource("/some/resource/path/myTemplate.txt");
+```
+
+In practice, if you need true absolute filesystem paths, you should avoid using absolute paths with `FileSystemResource` or `FileSystemXmlApplicationContext` and force the use of a `UrlResource` by using the `file`: URL prefix. The following examples show how to do so:
+
+```java
+// actual context type doesn't matter, the Resource will always be UrlResource
+ctx.getResource("file:///some/resource/path/myTemplate.txt");
+```
+
+```java
+// force this FileSystemXmlApplicationContext to load its definition via a UrlResource
+ApplicationContext ctx =
+    new FileSystemXmlApplicationContext("file:///conf/context.xml");
+```
+# 3 Validation, Data Binding, and Type Conversion
+
+There are pros and cons for considering validation as business logic, and Spring offers a design for validation (and data binding) that does not exclude either one of them. Specially, validation should not be tied to the web tier and should be easy to localize, and it should be possible to plug in any available validator. Considering these concerns, Spring provides a `Validator` contract that is both basic end eminently usable in every layer of an application.
+
+Data binding is useful for letting user input be dynamically bound to the domain model of an application (or whatever objects you use to process user input). Spring provides the aptly named `DataBinder` to do exactly that. The `Validator` and the `DataBinder` make up the `validation` package, which is primarily used in but not limited to the web layer.
+
+The `BeanWrapper` is a fundamental concept in the Spring Framework and is used in a lot of places. However, you probably do not need to use the `BeanWrapper` directly. Because this is reference documentation, however, we felt that some explanation might be in order. We explain the `BeanWrapper` in this chapter, since, if you are going to use it at all, you are most likely do so when trying to bind data to objects.
+
+Spring's `DataBinder` and the lower-level `BeanWrapper` both use `PropertyEditorSupport` implementations to parse and format property values. The `PropertyEditor` and `PropertyEditorSupport` types are part of the JavaBeans specification and are also explained in this chapter. Spring 3 introduced a `core.convert` package that provides a general type conversion facility, as well as a higher-level "format" package for formatting UI field values. You can use these packages as simpler alternatives to `PropertyEditorSupport` implementations. They are also discussed in this chapter.
+
+Spring supports Java Bean Validation through setup infrastructure and an adaptor to Spring's own `Validator` contract. Application can enable Bean Validation once globally, as described in Java Bean Validation, and use it exclusively for all validation needs. In the web layer, they can further register controller-local Spring `Validator` instances per `DataBinder`, as described in Configuring a `DataBinder`, which can be useful for plugging in custom validation logic creating annotations.
